@@ -35,9 +35,10 @@ AVATAR_CACHE_DIR = os.path.join(MINECRAFT_DIR, "avatars")
 AUTH_CACHE_FILE = os.path.join(MINECRAFT_DIR, "auth_cache.json")
 LAUNCHER_SETTINGS_FILE = os.path.join(MINECRAFT_DIR, "launcher_settings.json")
 LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
+INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.02"
+APP_VERSION = "1.04"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -490,10 +491,17 @@ class Launcher(ctk.CTk):
     def _write_windows_updater_script(self, source_exe, target_exe):
         script_path = os.path.join(tempfile.gettempdir(), "sohang-launcher-updater.bat")
         pid = os.getpid()
+        target_dir = os.path.dirname(target_exe)
+        backup_exe = os.path.join(
+            tempfile.gettempdir(),
+            f"sohang-launcher-backup-{pid}.exe"
+        )
         script = f"""@echo off
 setlocal
 set "SOURCE={source_exe}"
 set "TARGET={target_exe}"
+set "TARGET_DIR={target_dir}"
+set "BACKUP={backup_exe}"
 set "PID={pid}"
 :wait
 tasklist /FI "PID eq %PID%" | find "%PID%" >nul
@@ -501,10 +509,28 @@ if not errorlevel 1 (
   timeout /t 1 /nobreak >nul
   goto wait
 )
+timeout /t 3 /nobreak >nul
+if exist "%BACKUP%" del "%BACKUP%" >nul 2>nul
+if exist "%TARGET%" move /Y "%TARGET%" "%BACKUP%" >nul
+set "TRY=0"
+:copy
+set /A TRY+=1
 copy /Y "%SOURCE%" "%TARGET%" >nul
-start "" "%TARGET%"
+if exist "%TARGET%" goto copied
+if %TRY% GEQ 10 goto failed
+timeout /t 1 /nobreak >nul
+goto copy
+:copied
+timeout /t 2 /nobreak >nul
+start "" /D "%TARGET_DIR%" "%TARGET%"
 del "%SOURCE%" >nul 2>nul
+del "%BACKUP%" >nul 2>nul
 del "%~f0" >nul 2>nul
+exit /b 0
+:failed
+if exist "%BACKUP%" move /Y "%BACKUP%" "%TARGET%" >nul
+echo Update failed. Could not replace launcher.
+pause
 """
         with open(script_path, "w", encoding="utf-8") as file:
             file.write(script)
@@ -986,7 +1012,11 @@ del "%~f0" >nul 2>nul
 
     def _sync_server_mods(self):
         if MRPACK_PATH or MRPACK_URL:
+            if self._is_initial_mod_setup_done():
+                self._log("모드팩은 이미 준비되어 있어요. 개인 모드와 설정은 건드리지 않습니다.")
+                return
             self._install_mrpack()
+            self._mark_initial_mod_setup_done()
             return
 
         os.makedirs(MODS_DIR, exist_ok=True)
@@ -996,14 +1026,18 @@ del "%~f0" >nul 2>nul
             self._log("서버 모드 목록이 비어 있어요. SERVER_MODS에 모드 URL을 추가해 주세요.")
             return
 
+        if self._is_initial_mod_setup_done():
+            self._log("서버 모드는 이미 준비되어 있어요. 개인 모드는 건드리지 않습니다.")
+            return
+
         self._log("서버 모드 확인 중...")
         for mod in server_mods:
             self._download_server_mod(mod)
+        self._mark_initial_mod_setup_done()
         self._log("서버 모드 준비 완료!")
 
     def _install_mrpack(self):
         mrpack_path = self._prepare_mrpack()
-        self._clean_mods_for_mrpack(mrpack_path)
         callback = {
             "setStatus": lambda s: self._log(s),
             "setProgress": lambda c: None,
@@ -1018,6 +1052,40 @@ del "%~f0" >nul 2>nul
         )
         self._install_mrpack_dependencies(mrpack_path, callback)
         self._log("Modrinth 모드팩 설치 완료!")
+
+    def _is_initial_mod_setup_done(self):
+        if self._has_user_mod_files():
+            if not self._load_install_state().get("initial_mod_setup_done"):
+                self._mark_initial_mod_setup_done()
+            return True
+
+        return False
+
+    def _has_user_mod_files(self):
+        if not os.path.isdir(MODS_DIR):
+            return False
+
+        return any(
+            filename.lower().endswith(".jar")
+            for filename in os.listdir(MODS_DIR)
+            if os.path.isfile(os.path.join(MODS_DIR, filename))
+        )
+
+    def _load_install_state(self):
+        try:
+            with open(INSTALL_STATE_FILE, "r", encoding="utf-8") as file:
+                return json.load(file)
+        except (FileNotFoundError, json.JSONDecodeError):
+            return {}
+
+    def _mark_initial_mod_setup_done(self):
+        os.makedirs(MINECRAFT_DIR, exist_ok=True)
+        state = self._load_install_state()
+        state["initial_mod_setup_done"] = True
+        state["updated_at"] = int(time.time())
+        state["preserve_user_mods"] = True
+        with open(INSTALL_STATE_FILE, "w", encoding="utf-8") as file:
+            json.dump(state, file, ensure_ascii=False, indent=2)
 
     def _install_mrpack_dependencies(self, mrpack_path, callback):
         dependencies = self._get_mrpack_dependencies(mrpack_path)
@@ -1178,7 +1246,8 @@ del "%~f0" >nul 2>nul
     def _get_launch_version(self):
         if MRPACK_PATH or MRPACK_URL:
             mrpack_path = MRPACK_PATH or MRPACK_FILE
-            return minecraft_launcher_lib.mrpack.get_mrpack_launch_version(mrpack_path)
+            if os.path.exists(mrpack_path):
+                return minecraft_launcher_lib.mrpack.get_mrpack_launch_version(mrpack_path)
 
         neoforge_loader = minecraft_launcher_lib.mod_loader.get_mod_loader("neoforge")
         neoforge_id = neoforge_loader.get_installed_version(MC_VERSION, NEOFORGE_VERSION)
@@ -1259,33 +1328,38 @@ del "%~f0" >nul 2>nul
 
     def _prepare_minecraft_preferences(self):
         os.makedirs(MINECRAFT_DIR, exist_ok=True)
-        self._set_minecraft_language("ko_kr")
-        self._write_server_list()
-        self._log("Minecraft 언어를 한국어로 맞추고 서버 목록을 준비했어요.")
+        changed = []
+        if self._set_minecraft_language("ko_kr"):
+            changed.append("한국어")
+        if self._write_server_list():
+            changed.append("서버 목록")
+
+        if changed:
+            self._log(f"Minecraft 기본 설정 준비 완료: {', '.join(changed)}")
+        else:
+            self._log("Minecraft 개인 설정은 그대로 유지합니다.")
 
     def _set_minecraft_language(self, language_code):
         options_path = os.path.join(MINECRAFT_DIR, "options.txt")
         lines = []
-        found_language = False
 
         if os.path.exists(options_path):
             with open(options_path, "r", encoding="utf-8", errors="replace") as file:
                 lines = file.read().splitlines()
 
-        for index, line in enumerate(lines):
-            if line.startswith("lang:"):
-                lines[index] = f"lang:{language_code}"
-                found_language = True
-                break
+        if any(line.startswith("lang:") for line in lines):
+            return False
 
-        if not found_language:
-            lines.append(f"lang:{language_code}")
-
+        lines.append(f"lang:{language_code}")
         with open(options_path, "w", encoding="utf-8", newline="\n") as file:
             file.write("\n".join(lines) + "\n")
+        return True
 
     def _write_server_list(self):
         servers_path = os.path.join(MINECRAFT_DIR, "servers.dat")
+        if os.path.exists(servers_path):
+            return False
+
         with open(servers_path, "wb") as file:
             self._write_nbt_named_header(file, 10, "")
             self._write_nbt_named_header(file, 9, "servers")
@@ -1297,6 +1371,7 @@ del "%~f0" >nul 2>nul
             self._write_nbt_byte_tag(file, "acceptTextures", 0)
             file.write(b"\x00")
             file.write(b"\x00")
+        return True
 
     def _write_nbt_named_header(self, file, tag_type, name):
         encoded_name = name.encode("utf-8")

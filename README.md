@@ -50,13 +50,17 @@ Createdin.mrpack
 
 유저가 런처에서 `발사!`를 누르면:
 
-1. GitHub의 최신 `Createdin.mrpack`을 확인합니다.
-2. 기존 모드팩과 다르면 새로 다운로드합니다.
-3. 다운로드한 파일이 진짜 Modrinth `.mrpack`인지 검사합니다.
-4. 기존 `mods` 폴더에서 빠진 모드를 정리합니다.
-5. 새 모드팩 기준으로 모드와 NeoForge를 설치합니다.
-6. Minecraft 서버 목록에 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
-7. Minecraft 기본 언어를 한국어(`ko_kr`)로 맞춥니다.
+1. 처음 실행이거나 `mods` 폴더에 모드가 없을 때만 `Createdin.mrpack`을 다운로드하고 설치합니다.
+2. 한 번 설치된 뒤에는 `mods`, `config`, `options.txt`, `servers.dat` 같은 유저 개인 설정을 건드리지 않습니다.
+3. 유저가 직접 넣은 미니맵 모드, 한글채팅 모드, 키 설정, 미니맵 설정은 유지됩니다.
+4. `options.txt`에 언어 설정이 아직 없을 때만 한국어(`ko_kr`)를 기본값으로 넣습니다.
+5. `servers.dat` 파일이 없을 때만 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
+
+초기 설치 완료 상태는 아래 파일에 저장됩니다.
+
+```text
+C:\Users\<사용자>\.minecraft_asteroid\install_state.json
+```
 
 ## 게임 실행 문제 확인
 
@@ -103,7 +107,7 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.03"
+APP_VERSION = "1.04"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
