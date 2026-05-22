@@ -100,6 +100,7 @@ jobs:
             --icon sohangicon.icns \
             --add-data "sohangicon-transparent.png:." \
             --add-data "sohangicon.ico:." \
+            --add-data "fonts:fonts" \
             launcher.py
 
       - name: Zip app
