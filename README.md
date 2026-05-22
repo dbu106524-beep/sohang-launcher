@@ -62,6 +62,37 @@ Createdin.mrpack
 C:\Users\<사용자>\.minecraft_asteroid\install_state.json
 ```
 
+## 개인 모드 검색과 추가
+
+런처 오른쪽의 `Modrinth 모드` 패널에서 개인 모드를 검색하고 추가할 수 있습니다.
+
+현재 지원 범위:
+
+- Modrinth 검색
+- Minecraft `1.21.1` 필터
+- `neoforge` 로더 필터
+- 클라이언트 사용 가능 모드 검색
+- 검색어가 없으면 인기 모드 기본 표시
+- 인기순, 관련순, 업데이트순, 최신순 정렬
+- 20개씩 페이지 이동
+- 모드 아이콘, 설명, 다운로드 수 표시
+- 검색 결과 클릭 시 Modrinth 모드 페이지 열기
+- `mods` 폴더에 `.jar` 다운로드
+- 이미 같은 파일이 있으면 덮어쓰지 않음
+- Modrinth 필수 의존성 자동 설치
+- `내 모드` 탭에서 기본 서버 모드팩에 없는 추가 모드 목록 표시
+- 추가 모드 삭제
+- UI 글꼴은 `fonts` 폴더에 포함된 Paperlogy를 사용합니다.
+- 작은 글씨도 최소 11pt 이상으로 표시합니다.
+
+CurseForge는 아직 지원하지 않습니다. CurseForge는 API key가 필요해서 배포 런처에 넣기 전에 별도 보안 설계가 필요합니다.
+
+주의:
+
+- 유저가 직접 추가한 모드는 런처가 자동 삭제하지 않습니다.
+- 서버 접속에 문제가 생기면 사용자가 직접 추가한 모드와 서버 모드 호환성을 확인해야 합니다.
+- Modrinth API 요청에는 런처 식별용 `User-Agent`를 사용합니다.
+
 ## 게임 실행 문제 확인
 
 런처에서 `게임 프로세스를 시작했어요`가 뜬 뒤에도 게임 창이 안 보이면 먼저 기다려 주세요. 첫 실행은 모드가 많아서 1~3분 정도 로딩될 수 있습니다.
@@ -107,7 +138,7 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.04"
+APP_VERSION = "1.07"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
@@ -149,6 +180,7 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed `
   --icon sohangicon.ico `
   --add-data "sohangicon-transparent.png;." `
   --add-data "sohangicon.ico;." `
+  --add-data "fonts;fonts" `
   launcher.py
 ```
 
@@ -196,6 +228,7 @@ macOS 코드 호환성:
 - 경로는 `os.path` 기반이라 Windows/macOS 모두 대응합니다.
 - 자동 로그인 토큰은 macOS에서 Keychain을 사용하도록 되어 있습니다.
 - 런처 이미지 리소스는 PyInstaller 번들 경로(`sys._MEIPASS`)를 지원합니다.
+- Paperlogy 폰트 파일은 `fonts` 폴더로 번들에 포함합니다.
 - macOS에서는 업데이트 감지 후 릴리즈 페이지 안내 방식으로 운영합니다.
 - macOS용 릴리즈 asset 이름은 `SohangLauncher-mac-arm64.zip`, `SohangLauncher-mac-x64.zip`, `SohangLauncher-mac.zip`, `SohangLauncher.dmg`를 인식합니다.
 
@@ -206,6 +239,7 @@ python3 -m pip install pyinstaller customtkinter minecraft-launcher-lib requests
 python3 -m PyInstaller --noconfirm --clean --windowed --name SohangLauncher \
   --add-data "sohangicon-transparent.png:." \
   --add-data "sohangicon.ico:." \
+  --add-data "fonts:fonts" \
   launcher.py
 ```
 

@@ -1,4 +1,4 @@
-import customtkinter as ctk
+﻿import customtkinter as ctk
 import minecraft_launcher_lib
 from minecraft_launcher_lib.microsoft_account import (
     authenticate_with_xbl,
@@ -29,6 +29,7 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESOURCE_DIR = getattr(sys, "_MEIPASS", BASE_DIR)
 ICON_PATH = os.path.join(RESOURCE_DIR, "sohangicon-transparent.png")
 WINDOWS_ICON_PATH = os.path.join(RESOURCE_DIR, "sohangicon.ico")
+FONT_DIR = os.path.join(RESOURCE_DIR, "fonts")
 MINECRAFT_DIR = os.path.join(os.path.expanduser("~"), ".minecraft_asteroid")
 MODS_DIR = os.path.join(MINECRAFT_DIR, "mods")
 AVATAR_CACHE_DIR = os.path.join(MINECRAFT_DIR, "avatars")
@@ -38,7 +39,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.04"
+APP_VERSION = "1.07"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -64,6 +65,22 @@ MRPACK_PATH = ""
 MRPACK_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest/download/Createdin.mrpack"
 MRPACK_FILE = os.path.join(MINECRAFT_DIR, "server-pack.mrpack")
 MRPACK_META_FILE = os.path.join(MINECRAFT_DIR, "server-pack-meta.json")
+MODRINTH_API_BASE = "https://api.modrinth.com/v2"
+MODRINTH_USER_AGENT = f"dbu106524-beep/sohang-launcher/{APP_VERSION} (dinbu.kro.kr)"
+MODRINTH_LOADER = "neoforge"
+APP_FONT_FAMILY = "Paperlogy 4 Regular"
+APP_FONT_BOLD_FAMILY = "Paperlogy 7 Bold"
+FONT_FILES = (
+    "Paperlogy-1Thin.ttf",
+    "Paperlogy-2ExtraLight.ttf",
+    "Paperlogy-3Light.ttf",
+    "Paperlogy-4Regular.ttf",
+    "Paperlogy-5Medium.ttf",
+    "Paperlogy-6SemiBold.ttf",
+    "Paperlogy-7Bold.ttf",
+    "Paperlogy-8ExtraBold.ttf",
+    "Paperlogy-9Black.ttf",
+)
 
 # 서버 필수 모드 다운로드 목록입니다.
 # url에는 직접 다운로드 가능한 .jar 링크를 넣으면 됩니다.
@@ -117,7 +134,7 @@ class Launcher(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("소행성 런처")
-        self.geometry("780x560")
+        self.geometry("1320x660")
         self.resizable(False, False)
         self.configure(fg_color=SPACE_BG)
 
@@ -131,11 +148,19 @@ class Launcher(ctk.CTk):
         self.memory_gb = self._load_memory_setting()
         self._launch_status_after_id = None
         self._last_launch_status_message = None
+        self.mod_search_window = None
+        self.mod_search_results = []
+        self.mod_icon_images = {}
+        self.mod_search_page = 0
+        self.mod_sort_var = tk.StringVar(value="인기순")
+        self.mod_search_query = ""
+        self.font_family = self._load_app_fonts()
         self._load_images()
         self._build_ui()
         self._refresh_server_status()
         self._try_auto_login()
         self._check_launcher_update()
+        self.after(600, self._search_modrinth_mods)
 
     def _load_images(self):
         if not os.path.exists(ICON_PATH):
@@ -149,6 +174,28 @@ class Launcher(ctk.CTk):
             except tk.TclError:
                 pass
         self.logo_image = self.icon_image.subsample(10, 10)
+
+    def _load_app_fonts(self):
+        if sys.platform == "win32" and os.path.isdir(FONT_DIR):
+            add_font = ctypes.windll.gdi32.AddFontResourceExW
+            for filename in FONT_FILES:
+                font_path = os.path.join(FONT_DIR, filename)
+                if os.path.exists(font_path):
+                    add_font(font_path, 0x10, 0)
+            return APP_FONT_FAMILY
+
+        if sys.platform == "darwin":
+            return APP_FONT_FAMILY
+
+        return APP_FONT_FAMILY
+
+    def _font(self, size, weight="normal"):
+        family = APP_FONT_BOLD_FAMILY if weight == "bold" else self.font_family
+        return ctk.CTkFont(
+            family=family,
+            size=max(11, size),
+            weight=weight
+        )
 
     def _build_ui(self):
         sidebar = ctk.CTkFrame(self, width=220, corner_radius=0,
@@ -164,12 +211,12 @@ class Launcher(ctk.CTk):
             ctk.CTkLabel(logo_frame, text="", image=self.logo_image).pack()
         else:
             ctk.CTkLabel(logo_frame, text="🪐",
-                         font=ctk.CTkFont(size=48)).pack()
+                         font=self._font(48, "bold")).pack()
         ctk.CTkLabel(logo_frame, text="소행성",
-                     font=ctk.CTkFont(size=22, weight="bold"),
+                     font=self._font(24, "bold"),
                      text_color=SPACE_STAR).pack()
         ctk.CTkLabel(logo_frame, text="마인크래프트 소행성 서버",
-                     font=ctk.CTkFont(size=10),
+                     font=self._font(11),
                      text_color=SPACE_MUTED).pack(pady=(2, 0))
 
         ctk.CTkFrame(sidebar, height=1, fg_color=SPACE_ACCENT2).pack(
@@ -179,7 +226,7 @@ class Launcher(ctk.CTk):
             sidebar, text="Microsoft 로그인",
             command=self._login, width=180, height=38,
             fg_color=SPACE_ACCENT2, hover_color="#6d28d9",
-            font=ctk.CTkFont(size=13, weight="bold")
+            font=self._font(14, "bold")
         )
         self.login_btn.pack(pady=8, padx=20)
 
@@ -191,7 +238,7 @@ class Launcher(ctk.CTk):
             fg_color=SPACE_ACCENT2,
             hover_color="#6d28d9",
             text_color=SPACE_STAR,
-            font=ctk.CTkFont(size=11)
+            font=self._font(12)
         )
         self.remember_login_checkbox.pack(pady=(0, 5), padx=20, anchor="w")
 
@@ -201,13 +248,13 @@ class Launcher(ctk.CTk):
             width=180, height=30,
             state="disabled",
             fg_color=SPACE_MUTED, hover_color="#374151",
-            font=ctk.CTkFont(size=11, weight="bold")
+            font=self._font(12, "bold")
         )
         self.update_btn.pack(pady=(4, 5), padx=20)
 
         self.account_label = ctk.CTkLabel(
             sidebar, text="로그인이 필요해요",
-            font=ctk.CTkFont(size=11),
+            font=self._font(12),
             text_color=SPACE_MUTED
         )
         self.account_label.pack(pady=3)
@@ -217,17 +264,33 @@ class Launcher(ctk.CTk):
 
         ctk.CTkLabel(sidebar, text="").pack(expand=True)
         ctk.CTkLabel(sidebar, text=f"✦ Minecraft {MC_VERSION}",
-                     font=ctk.CTkFont(size=11),
+                     font=self._font(12),
                      text_color=SPACE_MUTED).pack(pady=5)
         ctk.CTkLabel(sidebar, text=f"✦ NeoForge {NEOFORGE_VERSION}",
-                     font=ctk.CTkFont(size=11),
+                     font=self._font(12),
                      text_color=SPACE_MUTED).pack(pady=(0, 20))
 
-        main = ctk.CTkFrame(self, corner_radius=0, fg_color=SPACE_BG)
-        main.pack(side="right", fill="both", expand=True, padx=20, pady=20)
+        content = ctk.CTkFrame(self, corner_radius=0, fg_color=SPACE_BG)
+        content.pack(side="right", fill="both", expand=True, padx=18, pady=18)
+
+        main = ctk.CTkFrame(content, width=510, corner_radius=0, fg_color=SPACE_BG)
+        main.pack(side="left", fill="both", expand=True, padx=(0, 14))
+        main.pack_propagate(False)
+
+        mod_panel = ctk.CTkFrame(
+            content,
+            width=520,
+            fg_color=SPACE_CARD,
+            corner_radius=12,
+            border_width=1,
+            border_color=SPACE_MUTED
+        )
+        mod_panel.pack(side="right", fill="both")
+        mod_panel.pack_propagate(False)
+        self._build_mod_search_panel(mod_panel)
 
         ctk.CTkLabel(main, text="✦ 우주로 떠날 준비가 됐나요?",
-                     font=ctk.CTkFont(size=15, weight="bold"),
+                     font=self._font(16, "bold"),
                      text_color=SPACE_STAR).pack(anchor="w", pady=(0, 15))
 
         status_card = ctk.CTkFrame(main, fg_color=SPACE_CARD,
@@ -239,7 +302,7 @@ class Launcher(ctk.CTk):
         status_header.pack(fill="x", padx=15, pady=(12, 8))
 
         ctk.CTkLabel(status_header, text="서버 상태",
-                     font=ctk.CTkFont(size=13, weight="bold"),
+                     font=self._font(14, "bold"),
                      text_color=SPACE_STAR).pack(side="left")
 
         self.status_refresh_btn = ctk.CTkButton(
@@ -247,20 +310,20 @@ class Launcher(ctk.CTk):
             command=self._refresh_server_status,
             width=78, height=26,
             fg_color=SPACE_MUTED, hover_color="#374151",
-            font=ctk.CTkFont(size=11)
+            font=self._font(12)
         )
         self.status_refresh_btn.pack(side="right")
 
         self.server_status_label = ctk.CTkLabel(
             status_card, text="확인 중...",
-            font=ctk.CTkFont(size=16, weight="bold"),
+            font=self._font(17, "bold"),
             text_color=SPACE_MUTED
         )
         self.server_status_label.pack(anchor="w", padx=15)
 
         self.server_detail_label = ctk.CTkLabel(
             status_card, text=f"{SERVER_IP}:{SERVER_PORT}",
-            font=ctk.CTkFont(size=11),
+            font=self._font(12),
             text_color=SPACE_MUTED
         )
         self.server_detail_label.pack(anchor="w", padx=15, pady=(2, 12))
@@ -271,7 +334,7 @@ class Launcher(ctk.CTk):
         mem_card.pack(fill="x", pady=(0, 12))
 
         ctk.CTkLabel(mem_card, text="🖥  메모리 할당",
-                     font=ctk.CTkFont(size=13, weight="bold"),
+                     font=self._font(14, "bold"),
                      text_color=SPACE_STAR).pack(anchor="w", padx=15, pady=(12, 6))
 
         mem_row = ctk.CTkFrame(mem_card, fg_color="transparent")
@@ -288,13 +351,13 @@ class Launcher(ctk.CTk):
 
         self.mem_label = ctk.CTkLabel(mem_row, text=f"{self.memory_gb} GB", width=50,
                                        text_color=SPACE_ACCENT,
-                                       font=ctk.CTkFont(size=13, weight="bold"))
+                                       font=self._font(14, "bold"))
         self.mem_label.pack(side="right")
 
         self.start_btn = ctk.CTkButton(
             main, text="🚀  발사!",
             height=50,
-            font=ctk.CTkFont(size=17, weight="bold"),
+            font=self._font(18, "bold"),
             command=self._start_game,
             state="disabled",
             fg_color=SPACE_ACCENT2,
@@ -309,12 +372,12 @@ class Launcher(ctk.CTk):
         log_card.pack(fill="both", expand=True)
 
         ctk.CTkLabel(log_card, text="📡  시스템 로그",
-                     font=ctk.CTkFont(size=13, weight="bold"),
+                     font=self._font(14, "bold"),
                      text_color=SPACE_STAR).pack(anchor="w", padx=15, pady=(12, 4))
 
         self.log_box = ctk.CTkTextbox(
             log_card, height=120,
-            font=ctk.CTkFont(family="Consolas", size=11),
+            font=self._font(11),
             fg_color="#07071a",
             text_color=SPACE_STAR,
             border_width=0
@@ -359,6 +422,581 @@ class Launcher(ctk.CTk):
         self.log_box.insert("end", f"› {msg}\n")
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
+
+    def _build_mod_search_panel(self, parent):
+        header = ctk.CTkFrame(parent, fg_color="transparent")
+        header.pack(fill="x", padx=12, pady=(12, 8))
+
+        ctk.CTkLabel(
+            header,
+            text="🔎  Modrinth 모드",
+            font=self._font(15, "bold"),
+            text_color=SPACE_STAR
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            header,
+            text=f"{MC_VERSION} · {MODRINTH_LOADER} 호환 검색",
+            font=self._font(11),
+            text_color=SPACE_MUTED
+        ).pack(anchor="w", pady=(2, 0))
+
+        self.mod_tabview = ctk.CTkTabview(
+            parent,
+            fg_color="transparent",
+            segmented_button_fg_color="#101033",
+            segmented_button_selected_color=SPACE_ACCENT2,
+            segmented_button_selected_hover_color="#6d28d9",
+            segmented_button_unselected_color=SPACE_MUTED,
+        )
+        self.mod_tabview.pack(fill="both", expand=True, padx=8, pady=(0, 8))
+        search_tab = self.mod_tabview.add("검색")
+        my_mods_tab = self.mod_tabview.add("내 모드")
+        self.mod_tabview.set("검색")
+        self.mod_tabview._segmented_button.configure(font=self._font(12, "bold"))
+
+        search_row = ctk.CTkFrame(search_tab, fg_color="transparent")
+        search_row.pack(fill="x", padx=4, pady=(6, 8))
+
+        self.mod_search_entry = ctk.CTkEntry(
+            search_row,
+            placeholder_text="비워두면 인기 모드",
+            height=34,
+            fg_color="#101033",
+            border_color=SPACE_MUTED,
+            text_color=SPACE_STAR,
+            font=self._font(12)
+        )
+        self.mod_search_entry.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        self.mod_search_entry.bind("<Return>", lambda _event: self._search_modrinth_mods())
+
+        self.mod_search_action_btn = ctk.CTkButton(
+            search_row,
+            text="검색",
+            width=62,
+            height=34,
+            command=self._search_modrinth_mods,
+            fg_color=SPACE_ACCENT2,
+            hover_color="#6d28d9",
+            font=self._font(12, "bold")
+        )
+        self.mod_search_action_btn.pack(side="right")
+
+        filter_row = ctk.CTkFrame(search_tab, fg_color="transparent")
+        filter_row.pack(fill="x", padx=4, pady=(0, 8))
+
+        self.mod_sort_menu = ctk.CTkOptionMenu(
+            filter_row,
+            values=["인기순", "관련순", "업데이트순", "최신순"],
+            variable=self.mod_sort_var,
+            command=lambda _value: self._reset_and_search_modrinth_mods(),
+            width=112,
+            height=30,
+            fg_color=SPACE_MUTED,
+            button_color=SPACE_ACCENT2,
+            button_hover_color="#6d28d9",
+            font=self._font(12),
+            dropdown_font=self._font(12),
+        )
+        self.mod_sort_menu.pack(side="left")
+
+        self.mod_prev_btn = ctk.CTkButton(
+            filter_row,
+            text="이전",
+            width=58,
+            height=30,
+            command=lambda: self._change_mod_search_page(-1),
+            fg_color=SPACE_MUTED,
+            hover_color="#374151",
+            font=self._font(12)
+        )
+        self.mod_prev_btn.pack(side="right", padx=(6, 0))
+
+        self.mod_next_btn = ctk.CTkButton(
+            filter_row,
+            text="다음",
+            width=58,
+            height=30,
+            command=lambda: self._change_mod_search_page(1),
+            fg_color=SPACE_MUTED,
+            hover_color="#374151",
+            font=self._font(12)
+        )
+        self.mod_next_btn.pack(side="right")
+
+        self.mod_search_status_label = ctk.CTkLabel(
+            search_tab,
+            text="인기 모드를 불러오는 중...",
+            font=self._font(11),
+            text_color=SPACE_MUTED,
+            wraplength=470,
+            justify="left"
+        )
+        self.mod_search_status_label.pack(anchor="w", padx=4, pady=(0, 8))
+
+        self.mod_results_frame = ctk.CTkScrollableFrame(
+            search_tab,
+            fg_color="transparent",
+            border_width=0,
+            corner_radius=0
+        )
+        self.mod_results_frame.pack(fill="both", expand=True, padx=0, pady=(0, 4))
+
+        my_mods_header = ctk.CTkFrame(my_mods_tab, fg_color="transparent")
+        my_mods_header.pack(fill="x", padx=4, pady=(6, 8))
+        ctk.CTkLabel(
+            my_mods_header,
+            text="서버 기본 모드팩에 없는 추가 모드만 표시합니다.",
+            font=self._font(11),
+            text_color=SPACE_MUTED,
+            wraplength=330,
+            justify="left"
+        ).pack(side="left", fill="x", expand=True)
+        ctk.CTkButton(
+            my_mods_header,
+            text="새로고침",
+            width=78,
+            height=30,
+            command=self._refresh_user_mod_list,
+            fg_color=SPACE_MUTED,
+            hover_color="#374151",
+            font=self._font(12)
+        ).pack(side="right", padx=(8, 0))
+
+        self.user_mod_status_label = ctk.CTkLabel(
+            my_mods_tab,
+            text="",
+            font=self._font(11),
+            text_color=SPACE_MUTED,
+            wraplength=470,
+            justify="left"
+        )
+        self.user_mod_status_label.pack(anchor="w", padx=4, pady=(0, 6))
+
+        self.user_mods_frame = ctk.CTkScrollableFrame(
+            my_mods_tab,
+            fg_color="transparent",
+            border_width=0,
+            corner_radius=0
+        )
+        self.user_mods_frame.pack(fill="both", expand=True, padx=0, pady=(0, 4))
+        self._refresh_user_mod_list()
+
+    def _open_mod_search(self):
+        self.mod_search_entry.focus()
+
+    def _reset_and_search_modrinth_mods(self):
+        self.mod_search_page = 0
+        self._search_modrinth_mods()
+
+    def _change_mod_search_page(self, delta):
+        next_page = max(0, self.mod_search_page + delta)
+        if next_page == self.mod_search_page:
+            return
+        self.mod_search_page = next_page
+        self._search_modrinth_mods()
+
+    def _search_modrinth_mods(self):
+        query = self.mod_search_entry.get().strip()
+        if query != self.mod_search_query:
+            self.mod_search_page = 0
+            self.mod_search_query = query
+
+        self.mod_search_action_btn.configure(state="disabled", text="검색 중")
+        self.mod_search_status_label.configure(text="Modrinth에서 검색 중...", text_color=SPACE_MUTED)
+        self._clear_mod_search_results()
+        threading.Thread(target=self._do_search_modrinth_mods, args=(query,), daemon=True).start()
+
+    def _do_search_modrinth_mods(self, query):
+        try:
+            facets = json.dumps([
+                [f"versions:{MC_VERSION}"],
+                [f"categories:{MODRINTH_LOADER}"],
+                ["project_type:mod"],
+                ["client_side:required", "client_side:optional"],
+            ])
+            response = requests.get(
+                f"{MODRINTH_API_BASE}/search",
+                params={
+                    "query": query,
+                    "facets": facets,
+                    "index": self._get_modrinth_sort_index(),
+                    "limit": 20,
+                    "offset": self.mod_search_page * 20,
+                },
+                headers=self._modrinth_headers(),
+                timeout=15
+            )
+            response.raise_for_status()
+            data = response.json()
+            results = data.get("hits", [])
+            total_hits = data.get("total_hits", 0)
+            self.after(0, lambda: self._show_mod_search_results(results, total_hits))
+        except Exception as e:
+            self.after(0, lambda: self._set_mod_search_error(f"검색 실패: {e}"))
+
+    def _get_modrinth_sort_index(self):
+        return {
+            "인기순": "downloads",
+            "관련순": "relevance",
+            "업데이트순": "updated",
+            "최신순": "newest",
+        }.get(self.mod_sort_var.get(), "downloads")
+
+    def _show_mod_search_results(self, results, total_hits=0):
+        self.mod_search_results = results
+        self.mod_icon_images = {}
+        self.mod_search_action_btn.configure(state="normal", text="검색")
+        self.mod_prev_btn.configure(state="normal" if self.mod_search_page > 0 else "disabled")
+        has_next_page = (self.mod_search_page + 1) * 20 < total_hits
+        self.mod_next_btn.configure(state="normal" if has_next_page else "disabled")
+
+        if not results:
+            self.mod_search_status_label.configure(text="검색 결과가 없어요.", text_color=SPACE_MUTED)
+            return
+
+        mode = f"'{self.mod_search_query}' 검색" if self.mod_search_query else "인기 모드"
+        self.mod_search_status_label.configure(
+            text=f"{mode} · {self.mod_search_page + 1}페이지 · {total_hits:,}개 중 {len(results)}개",
+            text_color=SPACE_GREEN
+        )
+
+        for index, result in enumerate(results):
+            self._add_mod_result_row(index, result)
+
+    def _add_mod_result_row(self, index, result):
+        project_url = self._get_modrinth_project_url(result)
+        row = ctk.CTkFrame(
+            self.mod_results_frame,
+            fg_color="#101033",
+            corner_radius=8,
+            border_width=1,
+            border_color=SPACE_MUTED
+        )
+        row.pack(fill="x", padx=8, pady=6)
+        row.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+
+        title = result.get("title") or result.get("slug") or "이름 없음"
+        description = result.get("description") or ""
+        downloads = result.get("downloads", 0)
+        icon_url = result.get("icon_url")
+
+        icon_label = ctk.CTkLabel(
+            row,
+            text=self._get_mod_icon_placeholder(title),
+            width=56,
+            height=56,
+            fg_color=SPACE_BG,
+            corner_radius=8,
+            text_color=SPACE_ACCENT
+        )
+        icon_label.pack(side="left", padx=(8, 0), pady=8)
+        icon_label.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+        if icon_url:
+            threading.Thread(
+                target=self._load_mod_icon,
+                args=(icon_url, icon_label, index),
+                daemon=True
+            ).start()
+
+        text_frame = ctk.CTkFrame(row, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True, padx=8, pady=8)
+        text_frame.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+
+        title_label = ctk.CTkLabel(
+            text_frame,
+            text=title,
+            font=self._font(14, "bold"),
+            text_color=SPACE_STAR
+        )
+        title_label.pack(anchor="w")
+        title_label.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+
+        description_label = ctk.CTkLabel(
+            text_frame,
+            text=description[:150],
+            font=self._font(11),
+            text_color=SPACE_MUTED,
+            wraplength=300,
+            justify="left"
+        )
+        description_label.pack(anchor="w", pady=(2, 2))
+        description_label.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+
+        meta_label = ctk.CTkLabel(
+            text_frame,
+            text=f"다운로드 {downloads:,} · {result.get('author', '')}",
+            font=self._font(11),
+            text_color=SPACE_ACCENT
+        )
+        meta_label.pack(anchor="w")
+        meta_label.bind("<Button-1>", lambda _event, url=project_url: webbrowser.open(url))
+
+        install_btn = ctk.CTkButton(
+            row,
+            text="추가",
+            width=62,
+            height=32,
+            command=lambda i=index: self._install_selected_modrinth_mod(i),
+            fg_color=SPACE_ACCENT2,
+            hover_color="#6d28d9",
+            font=self._font(12, "bold")
+        )
+        install_btn.pack(side="right", padx=(4, 8))
+
+    def _get_mod_icon_placeholder(self, title):
+        title = (title or "").strip()
+        if not title:
+            return "?"
+        return title[0].upper()
+
+    def _get_modrinth_project_url(self, result):
+        slug = result.get("slug") or result.get("project_id")
+        return f"https://modrinth.com/mod/{slug}"
+
+    def _load_mod_icon(self, icon_url, label, index):
+        try:
+            response = requests.get(icon_url, timeout=10, headers=self._modrinth_headers())
+            response.raise_for_status()
+            icon_bytes = response.content
+            self.after(0, lambda: self._set_mod_icon(label, index, icon_bytes))
+        except Exception:
+            pass
+
+    def _set_mod_icon(self, label, index, icon_bytes):
+        try:
+            encoded = base64.b64encode(icon_bytes).decode("ascii")
+            image = tk.PhotoImage(data=encoded)
+            while image.width() > 54 or image.height() > 54:
+                image = image.subsample(2, 2)
+            self.mod_icon_images[index] = image
+            label.configure(image=image, text="")
+        except Exception:
+            pass
+
+    def _clear_mod_search_results(self):
+        for child in self.mod_results_frame.winfo_children():
+            child.destroy()
+
+    def _set_mod_search_error(self, message):
+        self.mod_search_action_btn.configure(state="normal", text="검색")
+        self.mod_search_status_label.configure(text=message, text_color=SPACE_RED)
+
+    def _install_selected_modrinth_mod(self, index):
+        if index >= len(self.mod_search_results):
+            return
+
+        project = self.mod_search_results[index]
+        project_id = project.get("project_id")
+        title = project.get("title") or project.get("slug") or project_id
+        if not project_id:
+            self.mod_search_status_label.configure(text="프로젝트 ID를 찾지 못했어요.", text_color=SPACE_RED)
+            return
+
+        self.mod_search_action_btn.configure(state="disabled", text="설치 중")
+        self.mod_search_status_label.configure(text=f"{title} 설치 중...", text_color=SPACE_MUTED)
+        threading.Thread(
+            target=self._do_install_modrinth_mod,
+            args=(project_id, title),
+            daemon=True
+        ).start()
+
+    def _do_install_modrinth_mod(self, project_id, title):
+        try:
+            installed = []
+            self._install_modrinth_project(project_id, installed, set())
+            installed_text = ", ".join(installed[:4])
+            if len(installed) > 4:
+                installed_text += f" 외 {len(installed) - 4}개"
+            self.after(0, lambda: self._finish_mod_install(f"{title} 설치 완료: {installed_text}"))
+        except Exception as e:
+            self.after(0, lambda: self._finish_mod_install(f"설치 실패: {e}", error=True))
+
+    def _install_modrinth_project(self, project_id, installed, visited):
+        if project_id in visited:
+            return
+        visited.add(project_id)
+
+        version = self._get_modrinth_compatible_version(project_id)
+        for dependency in version.get("dependencies", []):
+            if dependency.get("dependency_type") != "required":
+                continue
+            dependency_project_id = dependency.get("project_id")
+            dependency_version_id = dependency.get("version_id")
+            if dependency_project_id:
+                self._install_modrinth_project(dependency_project_id, installed, visited)
+            elif dependency_version_id:
+                dependency_version = self._get_modrinth_version(dependency_version_id)
+                self._download_modrinth_version_file(dependency_version, installed)
+
+        self._download_modrinth_version_file(version, installed)
+
+    def _get_modrinth_compatible_version(self, project_id):
+        response = requests.get(
+            f"{MODRINTH_API_BASE}/project/{project_id}/version",
+            params={
+                "loaders": json.dumps([MODRINTH_LOADER]),
+                "game_versions": json.dumps([MC_VERSION]),
+            },
+            headers=self._modrinth_headers(),
+            timeout=15
+        )
+        response.raise_for_status()
+        versions = response.json()
+        if not versions:
+            raise RuntimeError(f"{MC_VERSION} {MODRINTH_LOADER} 호환 파일이 없어요.")
+        return versions[0]
+
+    def _get_modrinth_version(self, version_id):
+        response = requests.get(
+            f"{MODRINTH_API_BASE}/version/{version_id}",
+            headers=self._modrinth_headers(),
+            timeout=15
+        )
+        response.raise_for_status()
+        return response.json()
+
+    def _download_modrinth_version_file(self, version, installed):
+        files = version.get("files", [])
+        if not files:
+            raise RuntimeError(f"{version.get('name', '모드')} 파일이 없어요.")
+
+        file_info = next((file for file in files if file.get("primary")), files[0])
+        filename = file_info.get("filename")
+        url = file_info.get("url")
+        if not filename or not url:
+            raise RuntimeError("모드 다운로드 정보를 찾지 못했어요.")
+
+        os.makedirs(MODS_DIR, exist_ok=True)
+        target_path = os.path.join(MODS_DIR, filename)
+        if os.path.exists(target_path):
+            installed.append(f"{filename}(이미 있음)")
+            return
+
+        self._download_modrinth_file(url, target_path, file_info)
+        installed.append(filename)
+
+    def _download_modrinth_file(self, url, target_path, file_info):
+        temp_path = target_path + ".part"
+        with requests.get(url, stream=True, timeout=60, headers=self._modrinth_headers()) as response:
+            response.raise_for_status()
+            with open(temp_path, "wb") as file:
+                for chunk in response.iter_content(chunk_size=1024 * 1024):
+                    if chunk:
+                        file.write(chunk)
+
+        expected_sha1 = file_info.get("hashes", {}).get("sha1")
+        if expected_sha1 and self._sha1(temp_path) != expected_sha1.lower():
+            os.remove(temp_path)
+            raise RuntimeError(f"{os.path.basename(target_path)} 검증 실패")
+
+        os.replace(temp_path, target_path)
+
+    def _finish_mod_install(self, message, error=False):
+        self.mod_search_action_btn.configure(state="normal", text="검색")
+        self.mod_search_status_label.configure(
+            text=message,
+            text_color=SPACE_RED if error else SPACE_GREEN
+        )
+        self._log(message)
+        self._refresh_user_mod_list()
+
+    def _refresh_user_mod_list(self):
+        if not hasattr(self, "user_mods_frame"):
+            return
+
+        for child in self.user_mods_frame.winfo_children():
+            child.destroy()
+
+        user_mods = self._get_user_added_mod_files()
+        if not user_mods:
+            self.user_mod_status_label.configure(
+                text="추가 모드가 없어요.",
+                text_color=SPACE_MUTED
+            )
+            return
+
+        self.user_mod_status_label.configure(
+            text=f"추가 모드 {len(user_mods)}개",
+            text_color=SPACE_GREEN
+        )
+        for filename in user_mods:
+            self._add_user_mod_row(filename)
+
+    def _get_user_added_mod_files(self):
+        if not os.path.isdir(MODS_DIR):
+            return []
+
+        base_mods = set()
+        mrpack_path = MRPACK_PATH or MRPACK_FILE
+        if mrpack_path and os.path.exists(mrpack_path):
+            try:
+                base_mods = self._get_mrpack_mod_filenames(mrpack_path)
+            except Exception:
+                base_mods = set()
+
+        return sorted(
+            filename for filename in os.listdir(MODS_DIR)
+            if filename.lower().endswith(".jar")
+            and os.path.isfile(os.path.join(MODS_DIR, filename))
+            and filename not in base_mods
+        )
+
+    def _add_user_mod_row(self, filename):
+        row = ctk.CTkFrame(
+            self.user_mods_frame,
+            fg_color="#101033",
+            corner_radius=8,
+            border_width=1,
+            border_color=SPACE_MUTED
+        )
+        row.pack(fill="x", padx=8, pady=5)
+
+        path = os.path.join(MODS_DIR, filename)
+        size_mb = os.path.getsize(path) / (1024 * 1024)
+
+        text_frame = ctk.CTkFrame(row, fg_color="transparent")
+        text_frame.pack(side="left", fill="both", expand=True, padx=10, pady=8)
+
+        ctk.CTkLabel(
+            text_frame,
+            text=filename,
+            font=self._font(12, "bold"),
+            text_color=SPACE_STAR,
+            wraplength=330,
+            justify="left"
+        ).pack(anchor="w")
+        ctk.CTkLabel(
+            text_frame,
+            text=f"{size_mb:.1f} MB",
+            font=self._font(11),
+            text_color=SPACE_MUTED
+        ).pack(anchor="w", pady=(2, 0))
+
+        ctk.CTkButton(
+            row,
+            text="삭제",
+            width=58,
+            height=30,
+            command=lambda name=filename: self._delete_user_mod(name),
+            fg_color="#7f1d1d",
+            hover_color="#991b1b",
+            font=self._font(12, "bold")
+        ).pack(side="right", padx=8)
+
+    def _delete_user_mod(self, filename):
+        path = os.path.join(MODS_DIR, filename)
+        try:
+            if not os.path.isfile(path) or not filename.lower().endswith(".jar"):
+                raise RuntimeError("삭제할 모드 파일을 찾지 못했어요.")
+            os.remove(path)
+            self._log(f"추가 모드 삭제: {filename}")
+            self._refresh_user_mod_list()
+        except Exception as e:
+            self.user_mod_status_label.configure(text=f"삭제 실패: {e}", text_color=SPACE_RED)
+
+    def _modrinth_headers(self):
+        return {"User-Agent": MODRINTH_USER_AGENT}
 
     def _check_launcher_update(self):
         threading.Thread(target=self._do_check_launcher_update, daemon=True).start()
@@ -571,9 +1209,10 @@ pause
                 SPACE_GREEN
             ))
         except Exception as e:
+            error_message = str(e)
             self.after(0, lambda: self._set_server_status(
                 "오프라인",
-                f"{SERVER_IP}:{SERVER_PORT}  |  {e}",
+                f"{SERVER_IP}:{SERVER_PORT}  |  {error_message}",
                 SPACE_RED
             ))
 
@@ -1326,6 +1965,13 @@ pause
                 digest.update(chunk)
         return digest.hexdigest()
 
+    def _sha1(self, path):
+        digest = hashlib.sha1()
+        with open(path, "rb") as file:
+            for chunk in iter(lambda: file.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
+
     def _prepare_minecraft_preferences(self):
         os.makedirs(MINECRAFT_DIR, exist_ok=True)
         changed = []
@@ -1547,3 +2193,4 @@ pause
 if __name__ == "__main__":
     app = Launcher()
     app.mainloop()
+
