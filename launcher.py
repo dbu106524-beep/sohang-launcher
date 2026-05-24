@@ -39,7 +39,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.07"
+APP_VERSION = "1.08"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -49,13 +49,14 @@ LAUNCHER_MAC_ASSET_NAMES = (
     "SohangLauncher-mac.zip",
     "SohangLauncher.dmg",
 )
-MC_VERSION = "1.21.1"
+MC_VERSION = "26.1.2"
 SERVER_IP = "dinbu.kro.kr"
 SERVER_PORT = "25565"
 SERVER_ADDRESS = f"{SERVER_IP}:{SERVER_PORT}"
 SERVER_NAME = "소행성 서버"
 SERVER_PROTOCOL_VERSION = 767
-NEOFORGE_VERSION = "21.1.228"
+NEOFORGE_VERSION = "26.1.2.65-beta"
+REQUIRED_JAVA_MAJOR = 25
 CLIENT_ID = "0ab5ff14-0b50-4a22-a26b-def8c460b422" #"0ab5ff14-0b50-4a22-a26b-def8c460b422"
 DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"
 TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
@@ -1693,12 +1694,36 @@ pause
         self._log("Modrinth 모드팩 설치 완료!")
 
     def _is_initial_mod_setup_done(self):
-        if self._has_user_mod_files():
-            if not self._load_install_state().get("initial_mod_setup_done"):
-                self._mark_initial_mod_setup_done()
+        state = self._load_install_state()
+        if not self._has_user_mod_files():
+            return False
+
+        if self._is_install_state_current(state):
             return True
 
+        if state.get("initial_mod_setup_done"):
+            old_version = state.get("minecraft_version") or "이전 버전"
+            self._log(f"서버 버전 변경 감지: {old_version} -> {MC_VERSION}")
+            self._log("새 서버 모드팩을 한 번 적용합니다. 개인 모드와 설정은 유지됩니다.")
         return False
+
+    def _current_install_signature(self):
+        return {
+            "minecraft_version": MC_VERSION,
+            "neoforge_version": NEOFORGE_VERSION,
+            "java_major": REQUIRED_JAVA_MAJOR,
+            "mod_loader": MODRINTH_LOADER,
+        }
+
+    def _is_install_state_current(self, state):
+        if not state.get("initial_mod_setup_done"):
+            return False
+
+        for key, value in self._current_install_signature().items():
+            if state.get(key) != value:
+                return False
+
+        return True
 
     def _has_user_mod_files(self):
         if not os.path.isdir(MODS_DIR):
@@ -1723,6 +1748,7 @@ pause
         state["initial_mod_setup_done"] = True
         state["updated_at"] = int(time.time())
         state["preserve_user_mods"] = True
+        state.update(self._current_install_signature())
         with open(INSTALL_STATE_FILE, "w", encoding="utf-8") as file:
             json.dump(state, file, ensure_ascii=False, indent=2)
 
@@ -1731,6 +1757,14 @@ pause
         minecraft_version = dependencies.get("minecraft")
         if not minecraft_version:
             raise RuntimeError("mrpack에 Minecraft 버전 정보가 없어요.")
+        if minecraft_version != MC_VERSION:
+            raise RuntimeError(
+                f"mrpack Minecraft 버전이 런처 설정과 달라요: {minecraft_version} != {MC_VERSION}")
+
+        neoforge_version = dependencies.get("neoforge")
+        if neoforge_version and neoforge_version != NEOFORGE_VERSION:
+            raise RuntimeError(
+                f"mrpack NeoForge 버전이 런처 설정과 달라요: {neoforge_version} != {NEOFORGE_VERSION}")
 
         self._log(f"Minecraft {minecraft_version} 설치 확인 중...")
         minecraft_launcher_lib.install.install_minecraft_version(
@@ -1766,7 +1800,7 @@ pause
             return "java"
 
         runtime_name = runtime_info["name"]
-        self._log(f"Java 런타임 {runtime_name} 확인 중...")
+        self._log(f"Java {REQUIRED_JAVA_MAJOR} 런타임 확인 중... ({runtime_name})")
         minecraft_launcher_lib.runtime.install_jvm_runtime(
             runtime_name, MINECRAFT_DIR, callback=callback)
 

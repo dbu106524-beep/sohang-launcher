@@ -7,6 +7,10 @@
 `launcher.py`는 아래 주소에서 최신 모드팩을 다운로드합니다.
 
 ```python
+APP_VERSION = "1.08"
+MC_VERSION = "26.1.2"
+NEOFORGE_VERSION = "26.1.2.65-beta"
+REQUIRED_JAVA_MAJOR = 25
 MRPACK_PATH = ""
 MRPACK_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest/download/Createdin.mrpack"
 ```
@@ -46,15 +50,19 @@ Createdin.mrpack
 
 이렇게 하면 `releases/latest/download/Createdin.mrpack` 주소가 새 릴리즈의 파일을 가리키게 됩니다.
 
+현재 런처는 `Createdin.mrpack` 안의 Minecraft / NeoForge 버전이 런처 설정과 다르면 실행을 멈추고 로그에 오류를 표시합니다. 서버를 `26.1.2` / `26.1.2.65-beta`로 올린 뒤에는 Modrinth에서 같은 버전으로 다시 export한 `Createdin.mrpack`을 릴리즈에 올려야 합니다.
+
 ## 유저 런처에서는 어떻게 적용되나요?
 
 유저가 런처에서 `발사!`를 누르면:
 
-1. 처음 실행이거나 `mods` 폴더에 모드가 없을 때만 `Createdin.mrpack`을 다운로드하고 설치합니다.
-2. 한 번 설치된 뒤에는 `mods`, `config`, `options.txt`, `servers.dat` 같은 유저 개인 설정을 건드리지 않습니다.
-3. 유저가 직접 넣은 미니맵 모드, 한글채팅 모드, 키 설정, 미니맵 설정은 유지됩니다.
-4. `options.txt`에 언어 설정이 아직 없을 때만 한국어(`ko_kr`)를 기본값으로 넣습니다.
-5. `servers.dat` 파일이 없을 때만 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
+1. 처음 실행이거나 `mods` 폴더에 모드가 없을 때 `Createdin.mrpack`을 다운로드하고 설치합니다.
+2. 런처에 기록된 Minecraft / NeoForge / Java 버전이 바뀌면 새 서버 모드팩을 한 번 다시 적용합니다.
+3. 같은 서버 버전에서 한 번 설치된 뒤에는 `mods`, `config`, `options.txt`, `servers.dat` 같은 유저 개인 설정을 건드리지 않습니다.
+4. 서버 버전 업그레이드로 모드팩을 다시 적용할 때도 유저가 직접 넣은 추가 `.jar` 모드는 자동 삭제하지 않습니다.
+5. 유저가 직접 넣은 미니맵 모드, 한글채팅 모드, 키 설정, 미니맵 설정은 유지됩니다.
+6. `options.txt`에 언어 설정이 아직 없을 때만 한국어(`ko_kr`)를 기본값으로 넣습니다.
+7. `servers.dat` 파일이 없을 때만 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
 
 초기 설치 완료 상태는 아래 파일에 저장됩니다.
 
@@ -69,7 +77,7 @@ C:\Users\<사용자>\.minecraft_asteroid\install_state.json
 현재 지원 범위:
 
 - Modrinth 검색
-- Minecraft `1.21.1` 필터
+- Minecraft `26.1.2` 필터
 - `neoforge` 로더 필터
 - 클라이언트 사용 가능 모드 검색
 - 검색어가 없으면 인기 모드 기본 표시
@@ -138,7 +146,7 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.07"
+APP_VERSION = "1.08"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
