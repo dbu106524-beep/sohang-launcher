@@ -39,7 +39,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.08"
+APP_VERSION = "1.09"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -147,6 +147,9 @@ class Launcher(ctk.CTk):
         self.available_launcher_update = None
         self.account = None
         self.memory_gb = self._load_memory_setting()
+        self.resolution_width = self._load_resolution_setting("resolution_width", 1280)
+        self.resolution_height = self._load_resolution_setting("resolution_height", 720)
+        self.fullscreen_enabled = self._load_fullscreen_setting()
         self._launch_status_after_id = None
         self._last_launch_status_message = None
         self.mod_search_window = None
@@ -334,9 +337,21 @@ class Launcher(ctk.CTk):
                                  border_width=1, border_color=SPACE_MUTED)
         mem_card.pack(fill="x", pady=(0, 12))
 
-        ctk.CTkLabel(mem_card, text="🖥  메모리 할당",
+        mem_header = ctk.CTkFrame(mem_card, fg_color="transparent")
+        mem_header.pack(fill="x", padx=15, pady=(12, 6))
+
+        ctk.CTkLabel(mem_header, text="🖥  메모리 할당",
                      font=self._font(14, "bold"),
-                     text_color=SPACE_STAR).pack(anchor="w", padx=15, pady=(12, 6))
+                     text_color=SPACE_STAR).pack(side="left")
+
+        self.launch_settings_btn = ctk.CTkButton(
+            mem_header, text="설정",
+            command=self._open_launch_settings,
+            width=62, height=26,
+            fg_color=SPACE_MUTED, hover_color="#374151",
+            font=self._font(12, "bold")
+        )
+        self.launch_settings_btn.pack(side="right")
 
         mem_row = ctk.CTkFrame(mem_card, fg_color="transparent")
         mem_row.pack(fill="x", padx=15, pady=(0, 12))
@@ -394,25 +409,159 @@ class Launcher(ctk.CTk):
 
     def _load_memory_setting(self):
         try:
-            with open(LAUNCHER_SETTINGS_FILE, "r", encoding="utf-8") as file:
-                settings = json.load(file)
+            settings = self._load_launcher_settings()
             memory_gb = int(settings.get("memory_gb", 4))
             return max(2, min(16, memory_gb))
         except Exception:
             return 4
 
+    def _load_resolution_setting(self, key, default_value):
+        try:
+            settings = self._load_launcher_settings()
+            value = int(settings.get(key, default_value))
+            return max(320, min(7680, value))
+        except Exception:
+            return default_value
+
+    def _load_fullscreen_setting(self):
+        try:
+            settings = self._load_launcher_settings()
+            return bool(settings.get("fullscreen", False))
+        except Exception:
+            return False
+
+    def _load_launcher_settings(self):
+        if not os.path.exists(LAUNCHER_SETTINGS_FILE):
+            return {}
+
+        with open(LAUNCHER_SETTINGS_FILE, "r", encoding="utf-8") as file:
+            return json.load(file)
+
+    def _write_launcher_settings(self, settings):
+        os.makedirs(MINECRAFT_DIR, exist_ok=True)
+        with open(LAUNCHER_SETTINGS_FILE, "w", encoding="utf-8") as file:
+            json.dump(settings, file, ensure_ascii=False, indent=2)
+
     def _save_memory_setting(self):
         try:
-            os.makedirs(MINECRAFT_DIR, exist_ok=True)
-            settings = {}
-            if os.path.exists(LAUNCHER_SETTINGS_FILE):
-                with open(LAUNCHER_SETTINGS_FILE, "r", encoding="utf-8") as file:
-                    settings = json.load(file)
+            settings = self._load_launcher_settings()
             settings["memory_gb"] = self.memory_gb
-            with open(LAUNCHER_SETTINGS_FILE, "w", encoding="utf-8") as file:
-                json.dump(settings, file, ensure_ascii=False, indent=2)
+            self._write_launcher_settings(settings)
         except Exception as e:
             self._log(f"메모리 설정 저장 실패: {e}")
+
+    def _open_launch_settings(self):
+        if hasattr(self, "launch_settings_window") and self.launch_settings_window.winfo_exists():
+            self.launch_settings_window.focus()
+            return
+
+        window = ctk.CTkToplevel(self)
+        self.launch_settings_window = window
+        window.title("실행 설정")
+        window.geometry("330x260")
+        window.resizable(False, False)
+        window.configure(fg_color=SPACE_BG)
+        window.transient(self)
+        window.grab_set()
+
+        ctk.CTkLabel(
+            window,
+            text="실행 설정",
+            font=self._font(18, "bold"),
+            text_color=SPACE_STAR
+        ).pack(anchor="w", padx=18, pady=(18, 12))
+
+        form = ctk.CTkFrame(
+            window,
+            fg_color=SPACE_CARD,
+            corner_radius=12,
+            border_width=1,
+            border_color=SPACE_MUTED
+        )
+        form.pack(fill="x", padx=18, pady=(0, 12))
+
+        self.resolution_width_var = tk.StringVar(value=str(self.resolution_width))
+        self.resolution_height_var = tk.StringVar(value=str(self.resolution_height))
+        self.fullscreen_var = ctk.BooleanVar(value=self.fullscreen_enabled)
+
+        width_row = ctk.CTkFrame(form, fg_color="transparent")
+        width_row.pack(fill="x", padx=14, pady=(14, 8))
+        ctk.CTkLabel(width_row, text="가로", width=64,
+                     font=self._font(12, "bold"),
+                     text_color=SPACE_STAR).pack(side="left")
+        ctk.CTkEntry(width_row, textvariable=self.resolution_width_var,
+                     height=32, fg_color="#101033",
+                     border_color=SPACE_MUTED,
+                     text_color=SPACE_STAR,
+                     font=self._font(12)).pack(side="right", fill="x", expand=True)
+
+        height_row = ctk.CTkFrame(form, fg_color="transparent")
+        height_row.pack(fill="x", padx=14, pady=(0, 10))
+        ctk.CTkLabel(height_row, text="세로", width=64,
+                     font=self._font(12, "bold"),
+                     text_color=SPACE_STAR).pack(side="left")
+        ctk.CTkEntry(height_row, textvariable=self.resolution_height_var,
+                     height=32, fg_color="#101033",
+                     border_color=SPACE_MUTED,
+                     text_color=SPACE_STAR,
+                     font=self._font(12)).pack(side="right", fill="x", expand=True)
+
+        ctk.CTkCheckBox(
+            form,
+            text="전체화면으로 시작",
+            variable=self.fullscreen_var,
+            checkbox_width=18,
+            checkbox_height=18,
+            fg_color=SPACE_ACCENT2,
+            hover_color="#6d28d9",
+            text_color=SPACE_STAR,
+            font=self._font(12)
+        ).pack(anchor="w", padx=14, pady=(0, 14))
+
+        button_row = ctk.CTkFrame(window, fg_color="transparent")
+        button_row.pack(fill="x", padx=18)
+        ctk.CTkButton(
+            button_row, text="취소",
+            command=window.destroy,
+            width=86, height=34,
+            fg_color=SPACE_MUTED, hover_color="#374151",
+            font=self._font(12, "bold")
+        ).pack(side="right", padx=(8, 0))
+        ctk.CTkButton(
+            button_row, text="저장",
+            command=self._save_launch_settings_from_window,
+            width=86, height=34,
+            fg_color=SPACE_ACCENT2, hover_color="#6d28d9",
+            font=self._font(12, "bold")
+        ).pack(side="right")
+
+    def _save_launch_settings_from_window(self):
+        try:
+            width = int(self.resolution_width_var.get())
+            height = int(self.resolution_height_var.get())
+            if width < 320 or height < 240:
+                raise ValueError
+            if width > 7680 or height > 4320:
+                raise ValueError
+
+            self.resolution_width = width
+            self.resolution_height = height
+            self.fullscreen_enabled = bool(self.fullscreen_var.get())
+
+            settings = self._load_launcher_settings()
+            settings["memory_gb"] = self.memory_gb
+            settings["resolution_width"] = self.resolution_width
+            settings["resolution_height"] = self.resolution_height
+            settings["fullscreen"] = self.fullscreen_enabled
+            self._write_launcher_settings(settings)
+
+            mode = "전체화면" if self.fullscreen_enabled else "창모드"
+            self._log(f"실행 설정 저장 완료: {self.resolution_width}x{self.resolution_height}, {mode}")
+            self.launch_settings_window.destroy()
+        except ValueError:
+            self._log("해상도는 가로 320~7680, 세로 240~4320 사이 숫자로 입력해 주세요.")
+        except Exception as e:
+            self._log(f"실행 설정 저장 실패: {e}")
 
     def _log(self, msg):
         if threading.current_thread() is not self._main_thread:
@@ -1783,6 +1932,15 @@ pause
             if not loader_version:
                 continue
 
+            if loader_id == "neoforge":
+                self._ensure_neoforge_installed(
+                    minecraft_version,
+                    loader_version,
+                    callback,
+                    java_path
+                )
+                continue
+
             loader = minecraft_launcher_lib.mod_loader.get_mod_loader(loader_id)
             self._log(f"{loader.get_name()} {loader_version} 설치 확인 중...")
             loader.install(
@@ -1792,6 +1950,70 @@ pause
                 callback=callback,
                 java=java_path
             )
+
+    def _get_neoforge_installed_version(self, loader_version):
+        return f"neoforge-{loader_version}"
+
+    def _get_neoforge_installer_url(self, loader_version):
+        return (
+            "https://maven.neoforged.net/releases/net/neoforged/neoforge/"
+            f"{loader_version}/neoforge-{loader_version}-installer.jar"
+        )
+
+    def _ensure_neoforge_installed(self, minecraft_version, loader_version, callback, java_path):
+        installed_version = self._get_neoforge_installed_version(loader_version)
+        installed = [v["id"] for v in
+                     minecraft_launcher_lib.utils.get_installed_versions(MINECRAFT_DIR)]
+        if installed_version in installed:
+            self._log(f"NeoForge {loader_version} 설치 확인 완료")
+            return installed_version
+
+        self._log(f"NeoForge {loader_version} 설치 중...")
+        try:
+            loader = minecraft_launcher_lib.mod_loader.get_mod_loader("neoforge")
+            loader.install(
+                minecraft_version,
+                MINECRAFT_DIR,
+                loader_version=loader_version,
+                callback=callback,
+                java=java_path
+            )
+        except Exception as e:
+            self._log(f"기본 NeoForge 설치 방식 실패: {e}")
+            self._install_neoforge_from_installer(loader_version, java_path)
+
+        installed = [v["id"] for v in
+                     minecraft_launcher_lib.utils.get_installed_versions(MINECRAFT_DIR)]
+        if installed_version not in installed:
+            raise RuntimeError(f"NeoForge 설치 후 버전 정보를 찾을 수 없어요: {installed_version}")
+
+        self._log("NeoForge 설치 완료!")
+        return installed_version
+
+    def _install_neoforge_from_installer(self, loader_version, java_path):
+        installer_url = self._get_neoforge_installer_url(loader_version)
+        with tempfile.TemporaryDirectory(prefix="sohang-neoforge-") as temp_dir:
+            installer_path = os.path.join(temp_dir, "neoforge-installer.jar")
+            self._log("NeoForge installer 다운로드 중...")
+            response = requests.get(installer_url, timeout=60)
+            response.raise_for_status()
+            with open(installer_path, "wb") as file:
+                file.write(response.content)
+
+            self._log("NeoForge installer 실행 중...")
+            result = subprocess.run(
+                [java_path, "-jar", installer_path, "--install-client", MINECRAFT_DIR],
+                cwd=temp_dir,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                encoding="utf-8",
+                errors="replace"
+            )
+            if result.returncode != 0:
+                if result.stdout:
+                    self._log(result.stdout[-800:])
+                raise RuntimeError(f"NeoForge installer 실패: 종료 코드 {result.returncode}")
 
     def _ensure_java_runtime(self, minecraft_version, callback):
         runtime_info = minecraft_launcher_lib.runtime.get_version_runtime_information(
@@ -1922,24 +2144,23 @@ pause
             if os.path.exists(mrpack_path):
                 return minecraft_launcher_lib.mrpack.get_mrpack_launch_version(mrpack_path)
 
-        neoforge_loader = minecraft_launcher_lib.mod_loader.get_mod_loader("neoforge")
-        neoforge_id = neoforge_loader.get_installed_version(MC_VERSION, NEOFORGE_VERSION)
+        neoforge_id = self._get_neoforge_installed_version(NEOFORGE_VERSION)
         installed = [v["id"] for v in
                      minecraft_launcher_lib.utils.get_installed_versions(MINECRAFT_DIR)]
 
         if neoforge_id not in installed:
-            self._log("NeoForge 설치 중...")
-            neoforge_id = neoforge_loader.install(
+            callback = {
+                "setStatus": lambda s: self._log(s),
+                "setProgress": lambda c: None,
+                "setMax": lambda m: None,
+            }
+            java_path = self._ensure_java_runtime(MC_VERSION, callback)
+            neoforge_id = self._ensure_neoforge_installed(
                 MC_VERSION,
-                MINECRAFT_DIR,
-                loader_version=NEOFORGE_VERSION,
-                callback={
-                    "setStatus": lambda s: self._log(s),
-                    "setProgress": lambda c: None,
-                    "setMax": lambda m: None,
-                }
+                NEOFORGE_VERSION,
+                callback,
+                java_path
             )
-            self._log("NeoForge 설치 완료!")
 
         return neoforge_id
 
@@ -2129,12 +2350,18 @@ pause
                     "-XX:G1ReservePercent=20",
                 ],
                 "gameDirectory": MINECRAFT_DIR,
+                "customResolution": True,
+                "resolutionWidth": str(self.resolution_width),
+                "resolutionHeight": str(self.resolution_height),
             }
+            if self.fullscreen_enabled:
+                options["fullscreen"] = True
 
             self._log("🚀 소행성 서버 목록 준비 완료!")
             cmd = minecraft_launcher_lib.command.get_minecraft_command(
                 launch_version, MINECRAFT_DIR, options)
             cmd = self._fix_java_vm_option_order(cmd)
+            cmd = self._apply_window_mode_arguments(cmd)
             cmd = self._prefer_windowless_java(cmd)
 
             log_file = open(LAUNCHER_LOG_FILE, "w", encoding="utf-8", errors="replace")
@@ -2168,6 +2395,17 @@ pause
             fixed_cmd.insert(min(experimental_indexes), EXPERIMENTAL_JVM_UNLOCK_ARG)
 
         return fixed_cmd
+
+    def _apply_window_mode_arguments(self, cmd):
+        if self.fullscreen_enabled and "--fullscreen" not in cmd:
+            cmd.append("--fullscreen")
+
+        if "--width" not in cmd:
+            cmd.extend(["--width", str(self.resolution_width)])
+        if "--height" not in cmd:
+            cmd.extend(["--height", str(self.resolution_height)])
+
+        return cmd
 
     def _prefer_windowless_java(self, cmd):
         if os.name != "nt" or not cmd:

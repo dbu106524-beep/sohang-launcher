@@ -7,7 +7,7 @@
 `launcher.py`는 아래 주소에서 최신 모드팩을 다운로드합니다.
 
 ```python
-APP_VERSION = "1.08"
+APP_VERSION = "1.09"
 MC_VERSION = "26.1.2"
 NEOFORGE_VERSION = "26.1.2.65-beta"
 REQUIRED_JAVA_MAJOR = 25
@@ -120,6 +120,8 @@ C:\Users\<사용자>\.minecraft_asteroid\logs\debug.log
 
 게임이 바로 꺼지면 런처 로그에 종료 코드가 표시되고, `launcher-game.log`에서 원인을 확인할 수 있습니다.
 
+`Version 26.1.2 is not supported`처럼 `minecraft-launcher-lib`의 NeoForge 지원 판정이 새 버전을 따라가지 못하는 경우에는 런처가 NeoForge Maven installer를 직접 다운로드해서 설치합니다.
+
 `G1NewSizePercent is experimental` 오류가 나지 않도록 런처가 Java 실행 직전에 `-XX:+UnlockExperimentalVMOptions` 옵션을 실험 옵션보다 앞쪽으로 자동 정렬합니다.
 
 발사 버튼을 누른 뒤에는 우주 컨셉 문구가 3초마다 무작위로 바뀝니다.
@@ -127,6 +129,8 @@ C:\Users\<사용자>\.minecraft_asteroid\logs\debug.log
 자동 접속 인자는 사용하지 않습니다. 대신 런처가 `.minecraft_asteroid\servers.dat`에 `소행성 서버`를 등록해서 Minecraft 멀티플레이 서버 목록에 보이게 합니다.
 
 마지막으로 선택한 메모리 할당량은 아래 설정 파일에 저장됩니다. 예를 들어 6GB로 바꿨다면 런처를 다시 켜도 6GB로 시작합니다.
+
+메모리 카드의 `설정` 버튼에서 게임 해상도와 전체화면 시작 여부도 바꿀 수 있습니다. 저장한 해상도, 전체화면/창모드 설정은 런처를 껐다 켜도 유지됩니다.
 
 ```text
 C:\Users\<사용자>\.minecraft_asteroid\launcher_settings.json
@@ -146,7 +150,7 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.08"
+APP_VERSION = "1.09"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
