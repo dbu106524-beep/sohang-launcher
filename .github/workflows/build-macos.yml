@@ -40,6 +40,18 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install pyinstaller customtkinter minecraft-launcher-lib requests pillow
 
+      - name: Read launcher version
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import re
+          from pathlib import Path
+          text = Path("launcher.py").read_text(encoding="utf-8")
+          match = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+          if not match:
+              raise SystemExit("APP_VERSION not found")
+          print(f"APP_VERSION={match.group(1)}")
+          PY
+
       - name: Create macOS icon
         run: |
           mkdir -p build/icon.iconset
@@ -96,7 +108,7 @@ jobs:
 
       - name: Build app
         run: |
-          pyinstaller --noconfirm --clean --windowed --name SohangLauncher \
+          pyinstaller --noconfirm --clean --windowed --name SohangLauncher-${APP_VERSION} \
             --icon sohangicon.icns \
             --add-data "sohangicon-transparent.png:." \
             --add-data "sohangicon.ico:." \
@@ -106,16 +118,16 @@ jobs:
       - name: Zip app
         run: |
           cd dist
-          ditto -c -k --sequesterRsrc --keepParent SohangLauncher.app SohangLauncher-mac-${{ matrix.arch }}.zip
+          ditto -c -k --sequesterRsrc --keepParent SohangLauncher-${APP_VERSION}.app SohangLauncher-${APP_VERSION}-mac-${{ matrix.arch }}.zip
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: SohangLauncher-mac-${{ matrix.arch }}
-          path: dist/SohangLauncher-mac-${{ matrix.arch }}.zip
+          name: SohangLauncher-${{ env.APP_VERSION }}-mac-${{ matrix.arch }}
+          path: dist/SohangLauncher-${{ env.APP_VERSION }}-mac-${{ matrix.arch }}.zip
 
       - name: Upload to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
-          files: dist/SohangLauncher-mac-${{ matrix.arch }}.zip
+          files: dist/SohangLauncher-${{ env.APP_VERSION }}-mac-${{ matrix.arch }}.zip
