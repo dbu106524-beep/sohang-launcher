@@ -24,6 +24,7 @@ import base64
 import ctypes
 import tempfile
 import random
+import platform
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESOURCE_DIR = getattr(sys, "_MEIPASS", BASE_DIR)
@@ -39,10 +40,14 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.09"
+APP_VERSION = "1.13"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
+LAUNCHER_WINDOWS_ASSET_NAMES = (
+    f"SohangLauncher-{APP_VERSION}.exe",
+    LAUNCHER_WINDOWS_ASSET_NAME,
+)
 LAUNCHER_MAC_ASSET_NAMES = (
     "SohangLauncher-mac-arm64.zip",
     "SohangLauncher-mac-x64.zip",
@@ -158,9 +163,12 @@ class Launcher(ctk.CTk):
         self.mod_search_page = 0
         self.mod_sort_var = tk.StringVar(value="인기순")
         self.mod_search_query = ""
+        self._last_mrpack_changed = False
         self.font_family = self._load_app_fonts()
         self._load_images()
         self._build_ui()
+        self._log(f"소행성 런처 v{APP_VERSION}")
+        self._log(f"실행 파일: {sys.executable}")
         self._refresh_server_status()
         self._try_auto_login()
         self._check_launcher_update()
@@ -256,6 +264,10 @@ class Launcher(ctk.CTk):
         )
         self.update_btn.pack(pady=(4, 5), padx=20)
 
+        ctk.CTkLabel(sidebar, text=f"런처 v{APP_VERSION}",
+                     font=self._font(12, "bold"),
+                     text_color=SPACE_ACCENT).pack(pady=(2, 5))
+
         self.account_label = ctk.CTkLabel(
             sidebar, text="로그인이 필요해요",
             font=self._font(12),
@@ -318,6 +330,15 @@ class Launcher(ctk.CTk):
         )
         self.status_refresh_btn.pack(side="right")
 
+        self.launch_settings_btn = ctk.CTkButton(
+            status_card, text="해상도 설정",
+            command=self._open_launch_settings,
+            width=110, height=28,
+            fg_color=SPACE_MUTED, hover_color="#374151",
+            font=self._font(12, "bold")
+        )
+        self.launch_settings_btn.pack(anchor="e", padx=15, pady=(0, 8))
+
         self.server_status_label = ctk.CTkLabel(
             status_card, text="확인 중...",
             font=self._font(17, "bold"),
@@ -337,21 +358,9 @@ class Launcher(ctk.CTk):
                                  border_width=1, border_color=SPACE_MUTED)
         mem_card.pack(fill="x", pady=(0, 12))
 
-        mem_header = ctk.CTkFrame(mem_card, fg_color="transparent")
-        mem_header.pack(fill="x", padx=15, pady=(12, 6))
-
-        ctk.CTkLabel(mem_header, text="🖥  메모리 할당",
+        ctk.CTkLabel(mem_card, text="🖥  메모리 할당",
                      font=self._font(14, "bold"),
-                     text_color=SPACE_STAR).pack(side="left")
-
-        self.launch_settings_btn = ctk.CTkButton(
-            mem_header, text="설정",
-            command=self._open_launch_settings,
-            width=62, height=26,
-            fg_color=SPACE_MUTED, hover_color="#374151",
-            font=self._font(12, "bold")
-        )
-        self.launch_settings_btn.pack(side="right")
+                     text_color=SPACE_STAR).pack(anchor="w", padx=15, pady=(12, 6))
 
         mem_row = ctk.CTkFrame(mem_card, fg_color="transparent")
         mem_row.pack(fill="x", padx=15, pady=(0, 12))
@@ -1181,10 +1190,23 @@ class Launcher(ctk.CTk):
         assets = release_data.get("assets", [])
 
         if sys.platform == "win32":
-            preferred_names = (LAUNCHER_WINDOWS_ASSET_NAME,)
+            release_version = str(release_data.get("tag_name", "")).lstrip("v")
+            preferred_names = (
+                f"SohangLauncher-{release_version}.exe",
+                *LAUNCHER_WINDOWS_ASSET_NAMES,
+            )
             fallback_suffixes = (".exe",)
         elif sys.platform == "darwin":
-            preferred_names = LAUNCHER_MAC_ASSET_NAMES
+            release_version = str(release_data.get("tag_name", "")).lstrip("v")
+            arch = "arm64" if platform.machine().lower() == "arm64" else "x64"
+            other_arch = "x64" if arch == "arm64" else "arm64"
+            preferred_names = (
+                f"SohangLauncher-{release_version}-mac-{arch}.zip",
+                f"SohangLauncher-{release_version}-mac-{other_arch}.zip",
+                f"SohangLauncher-mac-{arch}.zip",
+                f"SohangLauncher-mac-{other_arch}.zip",
+                *LAUNCHER_MAC_ASSET_NAMES,
+            )
             fallback_suffixes = (".dmg", ".zip")
         else:
             preferred_names = ()
@@ -1240,8 +1262,12 @@ class Launcher(ctk.CTk):
             webbrowser.open(update.get("page_url") or UPDATE_PAGE_URL)
             return
 
+        if sys.platform == "darwin":
+            self._do_install_macos_launcher_update(asset, update)
+            return
+
         if sys.platform != "win32":
-            self._log("macOS에서는 릴리즈 페이지에서 새 앱을 받아 교체해 주세요.")
+            self._log("이 운영체제에서는 릴리즈 페이지에서 새 앱을 받아 교체해 주세요.")
             webbrowser.open(update.get("page_url") or UPDATE_PAGE_URL)
             return
 
@@ -1261,6 +1287,70 @@ class Launcher(ctk.CTk):
         except Exception as e:
             self._log(f"런처 자동 업데이트 실패: {e}")
             self.after(0, lambda: self.update_btn.configure(state="normal", text="업데이트 재시도"))
+
+    def _do_install_macos_launcher_update(self, asset, update):
+        if not asset.get("name", "").lower().endswith(".zip"):
+            self._log("macOS 자동 업데이트는 zip asset만 지원합니다. 릴리즈 페이지를 엽니다.")
+            webbrowser.open(update.get("page_url") or UPDATE_PAGE_URL)
+            return
+
+        app_path = self._get_current_macos_app_path()
+        if not app_path:
+            self._log("현재 macOS 앱 경로를 찾지 못해 릴리즈 페이지를 엽니다.")
+            webbrowser.open(update.get("page_url") or UPDATE_PAGE_URL)
+            return
+
+        try:
+            self.after(0, lambda: self.update_btn.configure(state="disabled", text="다운로드 중..."))
+            temp_zip = os.path.join(tempfile.gettempdir(), f"sohang-launcher-mac-update-{update['version']}.zip")
+            self._download_launcher_asset(asset["browser_download_url"], temp_zip)
+            script_path = self._write_macos_updater_script(temp_zip, app_path)
+            self._log("업데이트 파일 다운로드 완료. 런처를 재시작합니다.")
+            subprocess.Popen(["/bin/bash", script_path])
+            self.after(500, self.destroy)
+        except Exception as e:
+            self._log(f"macOS 런처 자동 업데이트 실패: {e}")
+            self.after(0, lambda: self.update_btn.configure(state="normal", text="업데이트 재시도"))
+
+    def _get_current_macos_app_path(self):
+        path = os.path.abspath(sys.executable)
+        while path and path != os.path.dirname(path):
+            if path.endswith(".app"):
+                return path
+            path = os.path.dirname(path)
+        return None
+
+    def _write_macos_updater_script(self, source_zip, target_app):
+        script_path = os.path.join(tempfile.gettempdir(), "sohang-launcher-updater.sh")
+        extract_dir = os.path.join(tempfile.gettempdir(), f"sohang-launcher-mac-update-{os.getpid()}")
+        pid = os.getpid()
+        script = f"""#!/bin/bash
+set -u
+SOURCE_ZIP={source_zip!r}
+TARGET_APP={target_app!r}
+EXTRACT_DIR={extract_dir!r}
+PID={pid}
+while kill -0 "$PID" >/dev/null 2>&1; do
+  sleep 1
+done
+rm -rf "$EXTRACT_DIR"
+mkdir -p "$EXTRACT_DIR"
+ditto -x -k "$SOURCE_ZIP" "$EXTRACT_DIR"
+NEW_APP="$(find "$EXTRACT_DIR" -maxdepth 1 -name '*.app' -type d | head -n 1)"
+if [ -z "$NEW_APP" ]; then
+  open "$(dirname "$TARGET_APP")"
+  exit 1
+fi
+rm -rf "$TARGET_APP"
+ditto "$NEW_APP" "$TARGET_APP"
+open "$TARGET_APP"
+rm -rf "$EXTRACT_DIR" "$SOURCE_ZIP"
+rm -f "$0"
+"""
+        with open(script_path, "w", encoding="utf-8", newline="\n") as file:
+            file.write(script)
+        os.chmod(script_path, 0o755)
+        return script_path
 
     def _download_launcher_asset(self, url, target_path):
         with requests.get(url, stream=True, timeout=60) as response:
@@ -1298,16 +1388,21 @@ if not errorlevel 1 (
   goto wait
 )
 timeout /t 3 /nobreak >nul
-if exist "%BACKUP%" del "%BACKUP%" >nul 2>nul
-if exist "%TARGET%" move /Y "%TARGET%" "%BACKUP%" >nul
 set "TRY=0"
-:copy
+:replace
 set /A TRY+=1
-copy /Y "%SOURCE%" "%TARGET%" >nul
+if exist "%BACKUP%" del "%BACKUP%" >nul 2>nul
+if exist "%TARGET%" move /Y "%TARGET%" "%BACKUP%" >nul 2>nul
+if exist "%TARGET%" (
+  if %TRY% GEQ 30 goto failed
+  timeout /t 1 /nobreak >nul
+  goto replace
+)
+copy /Y "%SOURCE%" "%TARGET%" >nul 2>nul
 if exist "%TARGET%" goto copied
-if %TRY% GEQ 10 goto failed
+if %TRY% GEQ 30 goto failed
 timeout /t 1 /nobreak >nul
-goto copy
+goto replace
 :copied
 timeout /t 2 /nobreak >nul
 start "" /D "%TARGET_DIR%" "%TARGET%"
@@ -1801,32 +1896,41 @@ pause
 
     def _sync_server_mods(self):
         if MRPACK_PATH or MRPACK_URL:
-            if self._is_initial_mod_setup_done():
+            mrpack_path = self._prepare_mrpack()
+            state = self._load_install_state()
+            managed_mods = self._get_mrpack_mod_filenames(mrpack_path)
+            if self._is_initial_mod_setup_done(state) and not self._last_mrpack_changed:
                 self._log("모드팩은 이미 준비되어 있어요. 개인 모드와 설정은 건드리지 않습니다.")
                 return
-            self._install_mrpack()
-            self._mark_initial_mod_setup_done()
+
+            self._remove_retired_server_mods(managed_mods, state)
+            self._remove_existing_server_mods_for_refresh(managed_mods)
+            self._install_mrpack(mrpack_path)
+            self._mark_initial_mod_setup_done(managed_mods)
             return
 
         os.makedirs(MODS_DIR, exist_ok=True)
         server_mods = self._get_server_mods()
+        managed_mods = self._get_server_mod_filenames(server_mods)
+        state = self._load_install_state()
 
         if not server_mods:
             self._log("서버 모드 목록이 비어 있어요. SERVER_MODS에 모드 URL을 추가해 주세요.")
             return
 
-        if self._is_initial_mod_setup_done():
+        if self._is_initial_mod_setup_done(state):
             self._log("서버 모드는 이미 준비되어 있어요. 개인 모드는 건드리지 않습니다.")
             return
 
+        self._remove_retired_server_mods(managed_mods, state)
+        self._remove_existing_server_mods_for_refresh(managed_mods)
         self._log("서버 모드 확인 중...")
         for mod in server_mods:
             self._download_server_mod(mod)
-        self._mark_initial_mod_setup_done()
+        self._mark_initial_mod_setup_done(managed_mods)
         self._log("서버 모드 준비 완료!")
 
-    def _install_mrpack(self):
-        mrpack_path = self._prepare_mrpack()
+    def _install_mrpack(self, mrpack_path):
         callback = {
             "setStatus": lambda s: self._log(s),
             "setProgress": lambda c: None,
@@ -1842,8 +1946,9 @@ pause
         self._install_mrpack_dependencies(mrpack_path, callback)
         self._log("Modrinth 모드팩 설치 완료!")
 
-    def _is_initial_mod_setup_done(self):
-        state = self._load_install_state()
+    def _is_initial_mod_setup_done(self, state=None):
+        if state is None:
+            state = self._load_install_state()
         if not self._has_user_mod_files():
             return False
 
@@ -1891,15 +1996,39 @@ pause
         except (FileNotFoundError, json.JSONDecodeError):
             return {}
 
-    def _mark_initial_mod_setup_done(self):
+    def _mark_initial_mod_setup_done(self, managed_server_mods=None):
         os.makedirs(MINECRAFT_DIR, exist_ok=True)
         state = self._load_install_state()
         state["initial_mod_setup_done"] = True
         state["updated_at"] = int(time.time())
         state["preserve_user_mods"] = True
+        if managed_server_mods is not None:
+            state["managed_server_mods"] = sorted(managed_server_mods)
         state.update(self._current_install_signature())
         with open(INSTALL_STATE_FILE, "w", encoding="utf-8") as file:
             json.dump(state, file, ensure_ascii=False, indent=2)
+
+    def _remove_retired_server_mods(self, current_server_mods, state):
+        previous_server_mods = set(state.get("managed_server_mods", []))
+        if not previous_server_mods or not os.path.isdir(MODS_DIR):
+            return
+
+        retired_mods = previous_server_mods - set(current_server_mods)
+        for filename in sorted(retired_mods):
+            path = os.path.join(MODS_DIR, filename)
+            if os.path.isfile(path) and filename.lower().endswith(".jar"):
+                os.remove(path)
+                self._log(f"이전 서버 모드 제거: {filename}")
+
+    def _remove_existing_server_mods_for_refresh(self, current_server_mods):
+        if not os.path.isdir(MODS_DIR):
+            return
+
+        for filename in sorted(set(current_server_mods)):
+            path = os.path.join(MODS_DIR, filename)
+            if os.path.isfile(path) and filename.lower().endswith(".jar"):
+                os.remove(path)
+                self._log(f"서버 모드 갱신 준비: {filename}")
 
     def _install_mrpack_dependencies(self, mrpack_path, callback):
         dependencies = self._get_mrpack_dependencies(mrpack_path)
@@ -1992,6 +2121,7 @@ pause
 
     def _install_neoforge_from_installer(self, loader_version, java_path):
         installer_url = self._get_neoforge_installer_url(loader_version)
+        self._ensure_launcher_profiles_file()
         with tempfile.TemporaryDirectory(prefix="sohang-neoforge-") as temp_dir:
             installer_path = os.path.join(temp_dir, "neoforge-installer.jar")
             self._log("NeoForge installer 다운로드 중...")
@@ -2014,6 +2144,21 @@ pause
                 if result.stdout:
                     self._log(result.stdout[-800:])
                 raise RuntimeError(f"NeoForge installer 실패: 종료 코드 {result.returncode}")
+
+    def _ensure_launcher_profiles_file(self):
+        profiles_path = os.path.join(MINECRAFT_DIR, "launcher_profiles.json")
+        if os.path.exists(profiles_path):
+            return
+
+        os.makedirs(MINECRAFT_DIR, exist_ok=True)
+        with open(profiles_path, "w", encoding="utf-8") as file:
+            json.dump(
+                {"profiles": {}, "settings": {}, "version": 3},
+                file,
+                ensure_ascii=False,
+                indent=4
+            )
+        self._log("Minecraft launcher profile 준비 완료")
 
     def _ensure_java_runtime(self, minecraft_version, callback):
         runtime_info = minecraft_launcher_lib.runtime.get_version_runtime_information(
@@ -2063,6 +2208,16 @@ pause
 
         return expected_mods
 
+    def _get_server_mod_filenames(self, server_mods):
+        filenames = set()
+        for mod in server_mods:
+            filename = mod.get("filename")
+            if not filename and mod.get("url"):
+                filename = self._filename_from_url(mod["url"])
+            if filename and filename.lower().endswith(".jar"):
+                filenames.add(filename)
+        return filenames
+
     def _get_mrpack_dependencies(self, mrpack_path):
         with zipfile.ZipFile(mrpack_path, "r") as pack:
             index = json.loads(pack.read("modrinth.index.json"))
@@ -2073,6 +2228,7 @@ pause
             return self._download_or_update_mrpack()
 
         if MRPACK_PATH:
+            self._last_mrpack_changed = True
             if not os.path.exists(MRPACK_PATH):
                 raise RuntimeError(f"mrpack 파일을 찾을 수 없어요: {MRPACK_PATH}")
             return MRPACK_PATH
@@ -2081,6 +2237,7 @@ pause
 
     def _download_or_update_mrpack(self):
         os.makedirs(MINECRAFT_DIR, exist_ok=True)
+        self._last_mrpack_changed = False
         meta = self._load_mrpack_meta()
         headers = {}
         if os.path.exists(MRPACK_FILE):
@@ -2109,6 +2266,7 @@ pause
 
         self._validate_mrpack_file(temp_path)
         os.replace(temp_path, MRPACK_FILE)
+        self._last_mrpack_changed = True
         self._save_mrpack_meta({
             "url": MRPACK_URL,
             "etag": response.headers.get("ETag"),

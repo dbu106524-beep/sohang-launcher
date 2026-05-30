@@ -7,7 +7,7 @@
 `launcher.py`는 아래 주소에서 최신 모드팩을 다운로드합니다.
 
 ```python
-APP_VERSION = "1.09"
+APP_VERSION = "1.13"
 MC_VERSION = "26.1.2"
 NEOFORGE_VERSION = "26.1.2.65-beta"
 REQUIRED_JAVA_MAJOR = 25
@@ -28,7 +28,7 @@ MRPACK_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest/
    - 예: `Sohang Launcher 1.0`
 6. 아래 `Attach binaries by dropping them here or selecting them` 영역에 파일을 올립니다.
    - 모드팩: 반드시 `Createdin.mrpack` 이름으로 업로드합니다.
-   - 런처 exe: 가능하면 `SohangLauncher.exe` 이름으로 업로드합니다.
+   - 런처 exe: 가능하면 `SohangLauncher-버전.exe` 이름으로 업로드합니다. 예: `SohangLauncher-1.13.exe`
 7. `Publish release`를 클릭합니다.
 
 ## 모드팩 업데이트 방법
@@ -58,11 +58,13 @@ Createdin.mrpack
 
 1. 처음 실행이거나 `mods` 폴더에 모드가 없을 때 `Createdin.mrpack`을 다운로드하고 설치합니다.
 2. 런처에 기록된 Minecraft / NeoForge / Java 버전이 바뀌면 새 서버 모드팩을 한 번 다시 적용합니다.
-3. 같은 서버 버전에서 한 번 설치된 뒤에는 `mods`, `config`, `options.txt`, `servers.dat` 같은 유저 개인 설정을 건드리지 않습니다.
-4. 서버 버전 업그레이드로 모드팩을 다시 적용할 때도 유저가 직접 넣은 추가 `.jar` 모드는 자동 삭제하지 않습니다.
-5. 유저가 직접 넣은 미니맵 모드, 한글채팅 모드, 키 설정, 미니맵 설정은 유지됩니다.
-6. `options.txt`에 언어 설정이 아직 없을 때만 한국어(`ko_kr`)를 기본값으로 넣습니다.
-7. `servers.dat` 파일이 없을 때만 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
+3. 같은 서버 버전이어도 GitHub latest의 `Createdin.mrpack`이 바뀌면 서버 기본 모드를 다시 적용합니다.
+4. 서버 모드팩에 포함된 `.jar`는 파일명이 같아도 먼저 지우고 다시 설치해서 내용 변경분이 확실히 반영됩니다.
+5. 이전 런처가 설치했던 서버 기본 모드 중 새 모드팩에서 빠진 `.jar`만 제거합니다.
+6. 유저가 직접 넣은 추가 `.jar`, `config`, `options.txt`, `servers.dat` 같은 개인 설정은 건드리지 않습니다.
+7. 유저가 직접 넣은 미니맵 모드, 한글채팅 모드, 키 설정, 미니맵 설정은 유지됩니다.
+8. `options.txt`에 언어 설정이 아직 없을 때만 한국어(`ko_kr`)를 기본값으로 넣습니다.
+9. `servers.dat` 파일이 없을 때만 `소행성 서버` / `dinbu.kro.kr:25565`를 등록합니다.
 
 초기 설치 완료 상태는 아래 파일에 저장됩니다.
 
@@ -120,7 +122,7 @@ C:\Users\<사용자>\.minecraft_asteroid\logs\debug.log
 
 게임이 바로 꺼지면 런처 로그에 종료 코드가 표시되고, `launcher-game.log`에서 원인을 확인할 수 있습니다.
 
-`Version 26.1.2 is not supported`처럼 `minecraft-launcher-lib`의 NeoForge 지원 판정이 새 버전을 따라가지 못하는 경우에는 런처가 NeoForge Maven installer를 직접 다운로드해서 설치합니다.
+`Version 26.1.2 is not supported`처럼 `minecraft-launcher-lib`의 NeoForge 지원 판정이 새 버전을 따라가지 못하는 경우에는 런처가 NeoForge Maven installer를 직접 다운로드해서 설치합니다. 이때 installer가 요구하는 `launcher_profiles.json`이 없으면 런처가 빈 프로필 파일을 먼저 생성합니다.
 
 `G1NewSizePercent is experimental` 오류가 나지 않도록 런처가 Java 실행 직전에 `-XX:+UnlockExperimentalVMOptions` 옵션을 실험 옵션보다 앞쪽으로 자동 정렬합니다.
 
@@ -130,7 +132,7 @@ C:\Users\<사용자>\.minecraft_asteroid\logs\debug.log
 
 마지막으로 선택한 메모리 할당량은 아래 설정 파일에 저장됩니다. 예를 들어 6GB로 바꿨다면 런처를 다시 켜도 6GB로 시작합니다.
 
-메모리 카드의 `설정` 버튼에서 게임 해상도와 전체화면 시작 여부도 바꿀 수 있습니다. 저장한 해상도, 전체화면/창모드 설정은 런처를 껐다 켜도 유지됩니다.
+서버 상태 카드의 `해상도 설정` 버튼에서 게임 해상도와 전체화면 시작 여부도 바꿀 수 있습니다. 저장한 해상도, 전체화면/창모드 설정은 런처를 껐다 켜도 유지됩니다.
 
 ```text
 C:\Users\<사용자>\.minecraft_asteroid\launcher_settings.json
@@ -150,10 +152,12 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.09"
+APP_VERSION = "1.13"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
+
+런처 왼쪽 사이드바와 시스템 로그에는 현재 실행 중인 런처 버전과 실제 실행 파일 경로가 표시됩니다. 새로 설치했는데도 업데이트 버튼이 계속 뜨면, 사이드바의 `런처 vX.X`와 로그의 `실행 파일:` 경로를 먼저 확인하세요. 대부분 예전 exe/app를 다시 실행하고 있는 경우입니다.
 
 런처 코드 자체를 수정했다면:
 
@@ -162,7 +166,8 @@ LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 2. Windows용 exe를 새로 빌드합니다.
 3. GitHub Releases에 새 태그로 릴리즈를 만듭니다.
 4. 릴리즈 asset에 exe를 업로드합니다.
-   - 추천 파일명: `SohangLauncher.exe`
+   - 추천 파일명: `SohangLauncher-버전.exe`
+   - 예: `SohangLauncher-1.13.exe`
    - 다른 `.exe` 파일명이어도 런처가 첫 번째 `.exe` asset을 찾아 자동 설치를 시도합니다.
 5. 유저 런처가 새 버전을 감지하면 `런처 업데이트 vX.X` 버튼이 활성화됩니다.
 6. 유저가 버튼을 누르면 exe를 다운로드하고, 별도 updater 배치 파일이 기존 exe를 교체한 뒤 런처를 재실행합니다.
@@ -171,8 +176,8 @@ LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 
 - 자동 교체는 패키징된 Windows exe에서 동작합니다.
 - `python launcher.py`로 실행하는 개발 모드에서는 자동 교체하지 않고 릴리즈 페이지를 엽니다.
-- macOS에서는 업데이트를 감지하면 릴리즈 페이지를 열어 새 `.app`/`.dmg`를 받도록 안내합니다.
-- Windows 자동 업데이트는 기존 런처가 완전히 종료될 때까지 기다린 뒤 기존 exe를 백업하고 새 exe를 복사합니다.
+- macOS에서는 zip asset을 찾으면 런처가 직접 다운로드한 뒤 현재 `.app`을 교체하고 다시 실행합니다. dmg만 있거나 앱 경로를 찾지 못하면 릴리즈 페이지를 엽니다.
+- Windows 자동 업데이트는 기존 런처가 완전히 종료될 때까지 기다린 뒤 기존 exe를 백업하고 새 exe를 복사합니다. 기존 exe가 잠겨 있으면 최대 30초 동안 재시도합니다.
 - `Failed to load Python DLL ... _MEI...` 오류가 난 버전에서는 한 번만 GitHub Release에서 `SohangLauncher.exe`를 직접 받아 교체해 주세요. 교체 후 다음 버전부터는 수정된 updater가 동작합니다.
 - 보안상 더 단단하게 하려면 exe 코드 서명 또는 SHA-256 체크섬 asset을 추가하는 것을 추천합니다.
 
@@ -181,14 +186,14 @@ LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 현재 Windows용 실행 파일은 아래 경로에 생성됩니다.
 
 ```text
-dist/SohangLauncher.exe
+dist/SohangLauncher-1.13.exe
 ```
 
 빌드 명령 예시:
 
 ```powershell
 python -m PyInstaller --noconfirm --clean --onefile --windowed `
-  --name SohangLauncher `
+  --name SohangLauncher-1.13 `
   --icon sohangicon.ico `
   --add-data "sohangicon-transparent.png;." `
   --add-data "sohangicon.ico;." `
@@ -199,9 +204,9 @@ python -m PyInstaller --noconfirm --clean --onefile --windowed `
 새 런처 버전을 배포할 때는:
 
 1. `launcher.py`의 `APP_VERSION`을 올립니다.
-2. `SohangLauncher.exe`를 다시 빌드합니다.
+2. `SohangLauncher-버전.exe`를 다시 빌드합니다.
 3. GitHub Releases에 새 태그로 릴리즈를 만듭니다.
-4. asset으로 `SohangLauncher.exe`와 `Createdin.mrpack`을 올립니다.
+4. asset으로 `SohangLauncher-버전.exe`와 `Createdin.mrpack`을 올립니다.
 
 ## macOS 배포 메모
 
@@ -221,19 +226,27 @@ GitHub Actions 자동 빌드 방법:
 4. 빌드가 끝나면 `Artifacts`에서 아래 두 파일을 받을 수 있습니다.
 
 ```text
-SohangLauncher-mac-arm64.zip
-SohangLauncher-mac-x64.zip
+SohangLauncher-1.13-mac-arm64.zip
+SohangLauncher-1.13-mac-x64.zip
 ```
 
 권장 배포:
 
-- `SohangLauncher-mac-arm64.zip`: Apple Silicon 맥용입니다. M1, M2, M3, M4 맥북 사용자는 이 파일을 받으면 됩니다.
-- `SohangLauncher-mac-x64.zip`: Intel 맥용입니다.
+- `SohangLauncher-1.13-mac-arm64.zip`: Apple Silicon 맥용입니다. M1, M2, M3, M4 맥북 사용자는 이 파일을 받으면 됩니다.
+- `SohangLauncher-1.13-mac-x64.zip`: Intel 맥용입니다.
 - GitHub Release를 발행하면 워크플로우가 두 zip 파일을 릴리즈 asset으로 자동 업로드합니다.
 
 워크플로우가 실패한 뒤 파일을 수정했다면 해당 실행 화면 오른쪽 위의 `Re-run jobs` 또는 Actions 탭의 `Run workflow`로 다시 실행합니다.
 
 macOS 아이콘 생성은 `sohangicon-transparent.png`, `sohangicon.png`, `sohangicon.ico` 순서로 시도합니다. 이미지 파일을 GitHub에 잘못 올렸거나 macOS가 읽지 못해도 임시 아이콘으로 빌드가 계속되도록 처리되어 있습니다.
+
+macOS에서 새 버전으로 교체하는 방법:
+
+1. 실행 중인 `SohangLauncher` 또는 `SohangLauncher-버전` 앱을 완전히 종료합니다.
+2. `Applications` 폴더나 다운로드 폴더에 남아 있는 이전 `SohangLauncher*.app`를 휴지통으로 보냅니다.
+3. 새 `SohangLauncher-버전-mac-arm64.zip` 또는 `SohangLauncher-버전-mac-x64.zip`을 풉니다.
+4. 새 `SohangLauncher-버전.app`을 `Applications` 폴더로 옮깁니다.
+5. 앱을 열고 왼쪽 사이드바의 `런처 vX.X`가 릴리즈 버전과 같은지 확인합니다.
 
 macOS 코드 호환성:
 
@@ -241,33 +254,33 @@ macOS 코드 호환성:
 - 자동 로그인 토큰은 macOS에서 Keychain을 사용하도록 되어 있습니다.
 - 런처 이미지 리소스는 PyInstaller 번들 경로(`sys._MEIPASS`)를 지원합니다.
 - Paperlogy 폰트 파일은 `fonts` 폴더로 번들에 포함합니다.
-- macOS에서는 업데이트 감지 후 릴리즈 페이지 안내 방식으로 운영합니다.
-- macOS용 릴리즈 asset 이름은 `SohangLauncher-mac-arm64.zip`, `SohangLauncher-mac-x64.zip`, `SohangLauncher-mac.zip`, `SohangLauncher.dmg`를 인식합니다.
+- macOS에서는 zip asset 기반 자동 교체를 시도하고, 실패하면 릴리즈 페이지 안내 방식으로 운영합니다.
+- macOS용 릴리즈 asset 이름은 `SohangLauncher-버전-mac-arm64.zip`, `SohangLauncher-버전-mac-x64.zip`, `SohangLauncher-mac-arm64.zip`, `SohangLauncher-mac-x64.zip`, `SohangLauncher-mac.zip`, `SohangLauncher.dmg`를 인식합니다.
 
 macOS 빌드 예시:
 
 ```bash
 python3 -m pip install pyinstaller customtkinter minecraft-launcher-lib requests
-python3 -m PyInstaller --noconfirm --clean --windowed --name SohangLauncher \
+python3 -m PyInstaller --noconfirm --clean --windowed --name SohangLauncher-1.13 \
   --add-data "sohangicon-transparent.png:." \
   --add-data "sohangicon.ico:." \
   --add-data "fonts:fonts" \
   launcher.py
 ```
 
-빌드 후 `dist/SohangLauncher.app`을 압축해서 릴리즈에 올립니다.
+빌드 후 `dist/SohangLauncher-1.13.app`을 압축해서 릴리즈에 올립니다.
 
 ```bash
 cd dist
-zip -r SohangLauncher-mac.zip SohangLauncher.app
+zip -r SohangLauncher-1.13-mac.zip SohangLauncher-1.13.app
 ```
 
 릴리즈 asset 예시:
 
 ```text
-SohangLauncher.exe
-SohangLauncher-mac-arm64.zip
-SohangLauncher-mac-x64.zip
+SohangLauncher-1.13.exe
+SohangLauncher-1.13-mac-arm64.zip
+SohangLauncher-1.13-mac-x64.zip
 Createdin.mrpack
 ```
 
@@ -288,7 +301,7 @@ Createdin.mrpack
 배포 전 확인:
 
 - [ ] `Createdin.mrpack` 파일명이 정확한가?
-- [ ] `SohangLauncher.exe`를 새 릴리즈 asset으로 업로드했는가?
+- [ ] `SohangLauncher-버전.exe`를 새 릴리즈 asset으로 업로드했는가?
 - [ ] GitHub 릴리즈에 asset으로 업로드했는가?
 - [ ] 새 릴리즈가 latest 상태인가?
 - [ ] 런처에서 `MRPACK_URL`이 `releases/latest/download/Createdin.mrpack`인가?
