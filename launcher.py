@@ -3,7 +3,6 @@ import minecraft_launcher_lib
 from minecraft_launcher_lib.microsoft_account import (
     authenticate_with_xbl,
     authenticate_with_xsts,
-    authenticate_with_minecraft,
     get_profile
 )
 import subprocess
@@ -25,6 +24,7 @@ import ctypes
 import tempfile
 import random
 import platform
+import shutil
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 RESOURCE_DIR = getattr(sys, "_MEIPASS", BASE_DIR)
@@ -40,7 +40,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.13"
+APP_VERSION = "1.15"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -65,6 +65,7 @@ REQUIRED_JAVA_MAJOR = 25
 CLIENT_ID = "0ab5ff14-0b50-4a22-a26b-def8c460b422" #"0ab5ff14-0b50-4a22-a26b-def8c460b422"
 DEVICE_CODE_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode"
 TOKEN_URL = "https://login.microsoftonline.com/consumers/oauth2/v2.0/token"
+MINECRAFT_LOGIN_URL = "https://api.minecraftservices.com/authentication/login_with_xbox"
 MICROSOFT_SCOPE = "XboxLive.signin offline_access"
 DEFAULT_OLD_CLIENT_ID = "00000000402b5328"
 MRPACK_PATH = ""
@@ -1655,15 +1656,9 @@ pause
             xsts_token = xsts_request["Token"]
 
             self._log("Minecraft Java 프로필 확인 중...")
-            account_request = authenticate_with_minecraft(userhash, xsts_token)
+            account_request = self._authenticate_with_minecraft_services(userhash, xsts_token)
             if "access_token" not in account_request:
-                error_message = account_request.get("errorMessage", account_request)
-                if isinstance(error_message, str) and "Invalid app registration" in error_message:
-                    raise RuntimeError(
-                        "Azure 앱이 아직 Minecraft API 사용 승인을 받지 못했어요. "
-                        "https://aka.ms/mce-reviewappid 에서 앱 ID 승인을 신청한 뒤 승인될 때까지 기다려야 합니다."
-                    )
-                raise RuntimeError(error_message)
+                raise RuntimeError(self._format_minecraft_auth_error(account_request))
 
             profile = get_profile(account_request["access_token"])
             if profile.get("error") == "NOT_FOUND":
@@ -1689,9 +1684,67 @@ pause
             self.after(0, lambda: self.start_btn.configure(state="normal"))
 
         except Exception as e:
+            self._delete_auth_cache()
             self._log(f"로그인 실패: {e}")
             self.after(0, lambda: self.login_btn.configure(
                 state="normal", text="Microsoft 로그인"))
+
+    def _authenticate_with_minecraft_services(self, userhash, xsts_token):
+        response = requests.post(
+            MINECRAFT_LOGIN_URL,
+            json={"identityToken": f"XBL3.0 x={userhash};{xsts_token}"},
+            headers={
+                "Content-Type": "application/json",
+                "Accept": "application/json",
+                "User-Agent": MODRINTH_USER_AGENT,
+            },
+            timeout=20
+        )
+        try:
+            data = response.json()
+        except ValueError:
+            data = {"raw": response.text[:500]}
+
+        if response.status_code >= 400:
+            data["_status_code"] = response.status_code
+            data["_url"] = MINECRAFT_LOGIN_URL
+        return data
+
+    def _format_minecraft_auth_error(self, response):
+        status_code = response.get("_status_code")
+        error_message = (
+            response.get("errorMessage")
+            or response.get("message")
+            or response.get("error")
+            or response.get("raw")
+            or response
+        )
+
+        if isinstance(error_message, str) and "Invalid app registration" in error_message:
+            return (
+                "Minecraft API 앱 등록이 거부됐어요. Azure 앱 승인 상태와 CLIENT_ID를 다시 확인해 주세요. "
+                "승인받은 앱 ID와 런처 CLIENT_ID가 같아야 합니다."
+            )
+
+        if status_code == 401:
+            return "Minecraft 인증 실패: Microsoft/Xbox 세션이 만료됐어요. 로그아웃 후 다시 로그인해 주세요."
+        if status_code == 403:
+            return (
+                "Minecraft 인증 실패: Minecraft Services가 이 앱 또는 계정 요청을 거부했어요. "
+                "공식 런처/Modrinth가 되는데 우리 런처만 실패하면 Azure App ID 승인 상태를 확인해야 합니다."
+            )
+        if status_code == 429:
+            return "Minecraft 인증 실패: 요청이 너무 많아요. 잠시 후 다시 시도해 주세요."
+        if status_code and status_code >= 500:
+            return "Minecraft 인증 서버 오류입니다. 잠시 후 다시 시도해 주세요."
+
+        if isinstance(error_message, dict) and error_message.get("path") == "/authentication/login_with_xbox":
+            return (
+                "Minecraft 인증 실패: Minecraft Services가 login_with_xbox 요청을 거부했지만 자세한 사유를 주지 않았어요. "
+                "공식 런처/Modrinth가 정상이라면 Azure App ID 승인 상태를 다시 확인해 주세요."
+            )
+
+        return f"Minecraft 인증 실패: HTTP {status_code or '알 수 없음'} / {error_message}"
 
     def _format_auth_service_error(self, service_name, response):
         xerr = response.get("XErr")
@@ -2094,8 +2147,12 @@ pause
         installed = [v["id"] for v in
                      minecraft_launcher_lib.utils.get_installed_versions(MINECRAFT_DIR)]
         if installed_version in installed:
-            self._log(f"NeoForge {loader_version} 설치 확인 완료")
-            return installed_version
+            if self._is_neoforge_install_valid(loader_version):
+                self._log(f"NeoForge {loader_version} 설치 확인 완료")
+                return installed_version
+
+            self._log("NeoForge 설치 파일 손상 감지. NeoForge를 다시 설치합니다.")
+            self._remove_neoforge_install(loader_version, installed_version)
 
         self._log(f"NeoForge {loader_version} 설치 중...")
         try:
@@ -2115,9 +2172,43 @@ pause
                      minecraft_launcher_lib.utils.get_installed_versions(MINECRAFT_DIR)]
         if installed_version not in installed:
             raise RuntimeError(f"NeoForge 설치 후 버전 정보를 찾을 수 없어요: {installed_version}")
+        if not self._is_neoforge_install_valid(loader_version):
+            raise RuntimeError("NeoForge 설치 후 patched client jar가 올바르지 않아요.")
 
         self._log("NeoForge 설치 완료!")
         return installed_version
+
+    def _is_neoforge_install_valid(self, loader_version):
+        patched_client_path = self._get_neoforge_patched_client_path(loader_version)
+        if not os.path.isfile(patched_client_path):
+            return False
+
+        try:
+            with zipfile.ZipFile(patched_client_path, "r") as jar:
+                return jar.testzip() is None
+        except zipfile.BadZipFile:
+            return False
+
+    def _get_neoforge_patched_client_path(self, loader_version):
+        return os.path.join(
+            MINECRAFT_DIR,
+            "libraries",
+            "net",
+            "neoforged",
+            "minecraft-client-patched",
+            loader_version,
+            f"minecraft-client-patched-{loader_version}.jar"
+        )
+
+    def _remove_neoforge_install(self, loader_version, installed_version):
+        paths = [
+            os.path.dirname(self._get_neoforge_patched_client_path(loader_version)),
+            os.path.join(MINECRAFT_DIR, "versions", installed_version),
+        ]
+        for path in paths:
+            if os.path.isdir(path):
+                shutil.rmtree(path, ignore_errors=True)
+                self._log(f"손상된 NeoForge 파일 제거: {path}")
 
     def _install_neoforge_from_installer(self, loader_version, java_path):
         installer_url = self._get_neoforge_installer_url(loader_version)
