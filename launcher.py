@@ -40,7 +40,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.15"
+APP_VERSION = "1.16"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -1690,25 +1690,46 @@ pause
                 state="normal", text="Microsoft 로그인"))
 
     def _authenticate_with_minecraft_services(self, userhash, xsts_token):
-        response = requests.post(
-            MINECRAFT_LOGIN_URL,
-            json={"identityToken": f"XBL3.0 x={userhash};{xsts_token}"},
-            headers={
-                "Content-Type": "application/json",
-                "Accept": "application/json",
-                "User-Agent": MODRINTH_USER_AGENT,
-            },
-            timeout=20
-        )
-        try:
-            data = response.json()
-        except ValueError:
-            data = {"raw": response.text[:500]}
+        last_error = None
+        for attempt in range(1, 4):
+            try:
+                response = requests.post(
+                    MINECRAFT_LOGIN_URL,
+                    json={"identityToken": f"XBL3.0 x={userhash};{xsts_token}"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "Accept": "application/json",
+                        "User-Agent": MODRINTH_USER_AGENT,
+                    },
+                    timeout=20
+                )
+                try:
+                    data = response.json()
+                except ValueError:
+                    data = {"raw": response.text[:500]}
 
-        if response.status_code >= 400:
-            data["_status_code"] = response.status_code
-            data["_url"] = MINECRAFT_LOGIN_URL
-        return data
+                if response.status_code >= 400:
+                    data["_status_code"] = response.status_code
+                    data["_url"] = MINECRAFT_LOGIN_URL
+                    if response.status_code == 429 or response.status_code >= 500:
+                        last_error = data
+                        if attempt < 3:
+                            self._log(f"Minecraft 인증 서버 응답 불안정 HTTP {response.status_code}. 재시도 {attempt}/3...")
+                            time.sleep(2 * attempt)
+                            continue
+                return data
+            except requests.RequestException as e:
+                last_error = {
+                    "_status_code": "network",
+                    "_url": MINECRAFT_LOGIN_URL,
+                    "raw": str(e),
+                }
+                if attempt < 3:
+                    self._log(f"Minecraft 인증 서버 연결 실패. 재시도 {attempt}/3...")
+                    time.sleep(2 * attempt)
+                    continue
+
+        return last_error or {"error": "unknown_minecraft_auth_error"}
 
     def _format_minecraft_auth_error(self, response):
         status_code = response.get("_status_code")
@@ -1734,9 +1755,11 @@ pause
                 "공식 런처/Modrinth가 되는데 우리 런처만 실패하면 Azure App ID 승인 상태를 확인해야 합니다."
             )
         if status_code == 429:
-            return "Minecraft 인증 실패: 요청이 너무 많아요. 잠시 후 다시 시도해 주세요."
+            return "Minecraft 인증 실패: HTTP 429 요청이 너무 많아요. 잠시 후 다시 시도해 주세요."
         if status_code and status_code >= 500:
-            return "Minecraft 인증 서버 오류입니다. 잠시 후 다시 시도해 주세요."
+            return f"Minecraft 인증 서버 오류입니다. HTTP {status_code}. 잠시 후 다시 시도해 주세요."
+        if status_code == "network":
+            return f"Minecraft 인증 서버에 연결하지 못했어요: {error_message}"
 
         if isinstance(error_message, dict) and error_message.get("path") == "/authentication/login_with_xbox":
             return (

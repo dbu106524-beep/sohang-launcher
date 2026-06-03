@@ -7,7 +7,7 @@
 `launcher.py`는 아래 주소에서 최신 모드팩을 다운로드합니다.
 
 ```python
-APP_VERSION = "1.15"
+APP_VERSION = "1.16"
 MC_VERSION = "26.1.2"
 NEOFORGE_VERSION = "26.1.2.65-beta"
 REQUIRED_JAVA_MAJOR = 25
@@ -28,7 +28,7 @@ MRPACK_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest/
    - 예: `Sohang Launcher 1.0`
 6. 아래 `Attach binaries by dropping them here or selecting them` 영역에 파일을 올립니다.
    - 모드팩: 반드시 `Createdin.mrpack` 이름으로 업로드합니다.
-   - 런처 exe: 가능하면 `SohangLauncher-버전.exe` 이름으로 업로드합니다. 예: `SohangLauncher-1.15.exe`
+   - 런처 exe: 가능하면 `SohangLauncher-버전.exe` 이름으로 업로드합니다. 예: `SohangLauncher-1.16.exe`
 7. `Publish release`를 클릭합니다.
 
 ## 모드팩 업데이트 방법
@@ -152,7 +152,7 @@ Windows에서는 가능한 경우 `java.exe` 대신 `javaw.exe`로 Minecraft를 
 현재 런처는 GitHub latest release tag를 확인해서 새 버전이 있으면 사이드바에 업데이트 버튼을 표시합니다.
 
 ```python
-APP_VERSION = "1.15"
+APP_VERSION = "1.16"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 ```
@@ -167,7 +167,7 @@ LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 3. GitHub Releases에 새 태그로 릴리즈를 만듭니다.
 4. 릴리즈 asset에 exe를 업로드합니다.
    - 추천 파일명: `SohangLauncher-버전.exe`
-   - 예: `SohangLauncher-1.15.exe`
+   - 예: `SohangLauncher-1.16.exe`
    - 다른 `.exe` 파일명이어도 런처가 첫 번째 `.exe` asset을 찾아 자동 설치를 시도합니다.
 5. 유저 런처가 새 버전을 감지하면 `런처 업데이트 vX.X` 버튼이 활성화됩니다.
 6. 유저가 버튼을 누르면 exe를 다운로드하고, 별도 updater 배치 파일이 기존 exe를 교체한 뒤 런처를 재실행합니다.
@@ -187,19 +187,24 @@ LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
 - 로그인 실패 시 자동 로그인 캐시를 삭제해서 꼬인 refresh token으로 계속 실패하는 상황을 줄입니다.
 - NeoForge patched client jar가 깨진 경우 손상된 NeoForge 파일을 삭제하고 재설치합니다.
 
+1.16 변경점:
+
+- Minecraft Services 인증 서버가 HTTP 429/5xx 또는 일시 네트워크 오류를 반환하면 3회 자동 재시도합니다.
+- 최종 실패 시 HTTP 상태 코드를 로그에 표시합니다.
+
 ## Windows exe 빌드
 
 현재 Windows용 실행 파일은 아래 경로에 생성됩니다.
 
 ```text
-dist/SohangLauncher-1.15.exe
+dist/SohangLauncher-1.16.exe
 ```
 
 빌드 명령 예시:
 
 ```powershell
 python -m PyInstaller --noconfirm --clean --onefile --windowed `
-  --name SohangLauncher-1.15 `
+  --name SohangLauncher-1.16 `
   --icon sohangicon.ico `
   --add-data "sohangicon-transparent.png;." `
   --add-data "sohangicon.ico;." `
@@ -232,14 +237,14 @@ GitHub Actions 자동 빌드 방법:
 4. 빌드가 끝나면 `Artifacts`에서 아래 두 파일을 받을 수 있습니다.
 
 ```text
-SohangLauncher-1.15-mac-arm64.zip
-SohangLauncher-1.15-mac-x64.zip
+SohangLauncher-1.16-mac-arm64.zip
+SohangLauncher-1.16-mac-x64.zip
 ```
 
 권장 배포:
 
-- `SohangLauncher-1.15-mac-arm64.zip`: Apple Silicon 맥용입니다. M1, M2, M3, M4 맥북 사용자는 이 파일을 받으면 됩니다.
-- `SohangLauncher-1.15-mac-x64.zip`: Intel 맥용입니다.
+- `SohangLauncher-1.16-mac-arm64.zip`: Apple Silicon 맥용입니다. M1, M2, M3, M4 맥북 사용자는 이 파일을 받으면 됩니다.
+- `SohangLauncher-1.16-mac-x64.zip`: Intel 맥용입니다.
 - GitHub Release를 발행하면 워크플로우가 두 zip 파일을 릴리즈 asset으로 자동 업로드합니다.
 
 워크플로우가 실패한 뒤 파일을 수정했다면 해당 실행 화면 오른쪽 위의 `Re-run jobs` 또는 Actions 탭의 `Run workflow`로 다시 실행합니다.
@@ -267,26 +272,26 @@ macOS 빌드 예시:
 
 ```bash
 python3 -m pip install pyinstaller customtkinter minecraft-launcher-lib requests
-python3 -m PyInstaller --noconfirm --clean --windowed --name SohangLauncher-1.15 \
+python3 -m PyInstaller --noconfirm --clean --windowed --name SohangLauncher-1.16 \
   --add-data "sohangicon-transparent.png:." \
   --add-data "sohangicon.ico:." \
   --add-data "fonts:fonts" \
   launcher.py
 ```
 
-빌드 후 `dist/SohangLauncher-1.15.app`을 압축해서 릴리즈에 올립니다.
+빌드 후 `dist/SohangLauncher-1.16.app`을 압축해서 릴리즈에 올립니다.
 
 ```bash
 cd dist
-zip -r SohangLauncher-1.15-mac.zip SohangLauncher-1.15.app
+zip -r SohangLauncher-1.16-mac.zip SohangLauncher-1.16.app
 ```
 
 릴리즈 asset 예시:
 
 ```text
-SohangLauncher-1.15.exe
-SohangLauncher-1.15-mac-arm64.zip
-SohangLauncher-1.15-mac-x64.zip
+SohangLauncher-1.16.exe
+SohangLauncher-1.16-mac-arm64.zip
+SohangLauncher-1.16-mac-x64.zip
 Createdin.mrpack
 ```
 
