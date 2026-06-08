@@ -40,7 +40,7 @@ LAUNCHER_LOG_FILE = os.path.join(MINECRAFT_DIR, "launcher-game.log")
 INSTALL_STATE_FILE = os.path.join(MINECRAFT_DIR, "install_state.json")
 KEYCHAIN_SERVICE = "SohangLauncher"
 KEYCHAIN_ACCOUNT = "minecraft-refresh-token"
-APP_VERSION = "1.16"
+APP_VERSION = "1.17"
 UPDATE_API_URL = "https://api.github.com/repos/dbu106524-beep/sohang-launcher/releases/latest"
 UPDATE_PAGE_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest"
 LAUNCHER_WINDOWS_ASSET_NAME = "SohangLauncher.exe"
@@ -72,6 +72,8 @@ MRPACK_PATH = ""
 MRPACK_URL = "https://github.com/dbu106524-beep/sohang-launcher/releases/latest/download/Createdin.mrpack"
 MRPACK_FILE = os.path.join(MINECRAFT_DIR, "server-pack.mrpack")
 MRPACK_META_FILE = os.path.join(MINECRAFT_DIR, "server-pack-meta.json")
+MRPACK_DOWNLOAD_RETRIES = 4
+MRPACK_DOWNLOAD_TIMEOUT = (15, 180)
 MODRINTH_API_BASE = "https://api.modrinth.com/v2"
 MODRINTH_USER_AGENT = f"dbu106524-beep/sohang-launcher/{APP_VERSION} (dinbu.kro.kr)"
 MODRINTH_LOADER = "neoforge"
@@ -2362,29 +2364,60 @@ pause
 
         self._log("Modrinth 모드팩 업데이트 확인 중...")
         temp_path = MRPACK_FILE + ".part"
-        with requests.get(MRPACK_URL, stream=True, timeout=30, headers=headers) as response:
-            if response.status_code == 304 and os.path.exists(MRPACK_FILE):
-                self._log("모드팩이 최신 버전입니다.")
-                return MRPACK_FILE
+        response = None
+        last_error = None
+        for attempt in range(1, MRPACK_DOWNLOAD_RETRIES + 1):
+            try:
+                with requests.get(
+                    MRPACK_URL,
+                    stream=True,
+                    timeout=MRPACK_DOWNLOAD_TIMEOUT,
+                    headers=headers
+                ) as response:
+                    if response.status_code == 304 and os.path.exists(MRPACK_FILE):
+                        self._log("모드팩이 최신 버전입니다.")
+                        return MRPACK_FILE
 
-            response.raise_for_status()
-            content_type = response.headers.get("content-type", "")
-            if "html" in content_type.lower():
-                raise RuntimeError("모드팩 대신 HTML 페이지를 받았어요. GitHub asset URL을 확인해 주세요.")
+                    if response.status_code in (429, 500, 502, 503, 504):
+                        raise RuntimeError(f"GitHub 응답 HTTP {response.status_code}")
 
-            self._log("새 모드팩 다운로드 중...")
-            with open(temp_path, "wb") as pack_file:
-                for chunk in response.iter_content(chunk_size=1024 * 1024):
-                    if chunk:
-                        pack_file.write(chunk)
+                    response.raise_for_status()
+                    content_type = response.headers.get("content-type", "")
+                    if "html" in content_type.lower():
+                        raise RuntimeError("모드팩 대신 HTML 페이지를 받았어요. GitHub asset URL을 확인해 주세요.")
+
+                    self._log("새 모드팩 다운로드 중...")
+                    with open(temp_path, "wb") as pack_file:
+                        for chunk in response.iter_content(chunk_size=1024 * 1024):
+                            if chunk:
+                                pack_file.write(chunk)
+                    break
+            except (requests.RequestException, RuntimeError) as e:
+                last_error = e
+                if os.path.exists(temp_path):
+                    try:
+                        os.remove(temp_path)
+                    except OSError:
+                        pass
+                if attempt < MRPACK_DOWNLOAD_RETRIES:
+                    self._log(f"모드팩 다운로드 실패: {e}. 재시도 {attempt}/{MRPACK_DOWNLOAD_RETRIES}...")
+                    time.sleep(2 * attempt)
+                    continue
+                if os.path.exists(MRPACK_FILE):
+                    self._log(f"모드팩 업데이트 확인 실패: {e}. 기존 모드팩으로 계속 실행합니다.")
+                    return MRPACK_FILE
+                raise RuntimeError(
+                    "모드팩 다운로드가 실패했어요. GitHub 연결이 불안정하거나 차단됐을 수 있어요. "
+                    f"잠시 후 다시 시도해 주세요. ({e})"
+                ) from e
 
         self._validate_mrpack_file(temp_path)
         os.replace(temp_path, MRPACK_FILE)
         self._last_mrpack_changed = True
         self._save_mrpack_meta({
             "url": MRPACK_URL,
-            "etag": response.headers.get("ETag"),
-            "last_modified": response.headers.get("Last-Modified"),
+            "etag": response.headers.get("ETag") if response else None,
+            "last_modified": response.headers.get("Last-Modified") if response else None,
             "downloaded_at": int(time.time()),
         })
         self._log("모드팩 업데이트 완료!")
