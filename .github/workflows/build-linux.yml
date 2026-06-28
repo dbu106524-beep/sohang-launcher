@@ -1,0 +1,75 @@
+name: Build Linux Launcher
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - "v*"
+      - "[0-9]*"
+  release:
+    types:
+      - published
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Linux x64
+    runs-on: ubuntu-24.04
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install system packages
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-tk
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pyinstaller customtkinter minecraft-launcher-lib requests pillow
+
+      - name: Read launcher version
+        run: |
+          python - <<'PY' >> "$GITHUB_ENV"
+          import re
+          from pathlib import Path
+          text = Path("launcher.py").read_text(encoding="utf-8")
+          match = re.search(r'^APP_VERSION\s*=\s*"([^"]+)"', text, re.MULTILINE)
+          if not match:
+              raise SystemExit("APP_VERSION not found")
+          print(f"APP_VERSION={match.group(1)}")
+          PY
+
+      - name: Build executable
+        run: |
+          pyinstaller --noconfirm --clean --onefile --windowed --name SohangLauncher-${APP_VERSION} \
+            --add-data "sohangicon-transparent.png:." \
+            --add-data "sohangicon.ico:." \
+            --add-data "fonts:fonts" \
+            launcher.py
+
+      - name: Package
+        run: |
+          cd dist
+          tar -czf SohangLauncher-${APP_VERSION}-linux-x64.tar.gz SohangLauncher-${APP_VERSION}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SohangLauncher-${{ env.APP_VERSION }}-linux-x64
+          path: dist/SohangLauncher-${{ env.APP_VERSION }}-linux-x64.tar.gz
+
+      - name: Upload to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/SohangLauncher-${{ env.APP_VERSION }}-linux-x64.tar.gz
